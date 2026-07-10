@@ -1,0 +1,56 @@
+{
+  "formCode": "S12501F",
+  "formTitle": "衛生檢查紀錄表",
+  "companyName": "五惠食品廠股份有限公司",
+  "defaultArea": "全廠每日",
+  "verdictLegend": "檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O",
+  "sections": [
+    {
+      "name": "人員",
+      "sortOrder": 1,
+      "items": [
+        { "itemNo": 2, "content": "穿戴整潔之工作衣帽、髮帽、口罩、雨鞋或鞋套。" },
+        { "itemNo": 3, "content": "依清潔、準清潔及一般區域分顏色戴帽子。" },
+        { "itemNo": 4, "content": "保持手部清潔，不得蓄留指甲、塗指甲油及佩帶飾物，必要時戴手套。" },
+        { "itemNo": 5, "content": "接觸食品者不得有感冒、呼吸道症狀、皮膚病或手部有膿瘡、傷口等。" },
+        { "itemNo": 6, "content": "飲食與吸菸行為需到指定場所。" },
+        { "itemNo": 7, "content": "私人物品應放置於置物櫃，不可任意擺置。" }
+      ]
+    },
+    {
+      "name": "清潔、準清潔區",
+      "sortOrder": 2,
+      "items": [
+        { "itemNo": 8, "content": "門在無使用時緊閉。" },
+        { "itemNo": 9, "content": "窗戶在無使用時緊閉，如有開啟均有紗窗，紗窗有緊閉無隙縫。" },
+        { "itemNo": 10, "content": "進入時走浴塵室，用清潔劑洗手並用酒精與泡鞋池消毒，清潔與消毒設備皆正常。" },
+        { "itemNo": 11, "content": "水溝應排水功能完善，保持乾淨暢通，無雜物阻塞。" },
+        { "itemNo": 12, "content": "不得有紙箱與竹、木製器具。" },
+        { "itemNo": 13, "content": "不得有病媒侵入。" },
+        { "itemNo": 14, "content": "不得堆積與加工無關之雜物。" },
+        { "itemNo": 15, "content": "餘料有防護並有明顯標示。" },
+        { "itemNo": 16, "content": "工器具於未使用的情況時均有擺放於固定位置。" },
+        { "itemNo": 17, "content": "食品與調理器具擺放於棧板上，不得直接接觸地面。" },
+        { "itemNo": 18, "content": "地面應無破損、積水、髒汙之現象。" },
+        { "itemNo": 19, "content": "設備、工作台及器具應完好、清潔。" },
+        { "itemNo": 20, "content": "易碎物應保持完整，不得有龜裂或破損。" },
+        { "itemNo": 21, "content": "製程不良品及退貨品不可任意堆放。" },
+        { "itemNo": 22, "content": "如原、配料有過敏原成分應使用專用棧板並有明確標示與區隔。" }
+      ]
+    },
+    {
+      "name": "環境",
+      "sortOrder": 3,
+      "items": [
+        { "itemNo": 23, "content": "牆壁、天花板保持清潔、無破損、蜘蛛網等。" },
+        { "itemNo": 24, "content": "走道應保持整潔且暢通。" },
+        { "itemNo": 25, "content": "垃圾與廢料應於當日拋棄並分類置於規定場所，不得在現場留過夜。" },
+        { "itemNo": 26, "content": "廚餘桶蓋子有蓋好，桶身保持乾淨。" },
+        { "itemNo": 27, "content": "廁所功能正常，並保持清潔衛生。" },
+        { "itemNo": 28, "content": "更衣室、置物櫃內應保持清潔衛生，不得放置食品。" },
+        { "itemNo": 29, "content": "化學品及其專櫃之維護: 標示完整，且分裝日期及有效日期皆在效期內。" },
+        { "itemNo": 30, "content": "■無□有暫時性設施＿＿＿＿＿不可造成污染及滋生蟲害。", "hasTempFacilityField": true }
+      ]
+    }
+  ]
+}
