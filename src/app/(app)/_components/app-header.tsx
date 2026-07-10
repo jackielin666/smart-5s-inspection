@@ -18,12 +18,12 @@ export function AppHeader({ email }: { email: string | null }) {
       className="safe-top sticky top-0 z-20 flex items-center justify-between px-4 py-3 text-white shadow-sm"
       style={{ background: 'var(--brand)' }}
     >
-      <div className="flex items-center gap-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15 text-sm font-bold">
+      <div className="flex items-center gap-2.5">
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15 text-sm font-bold">
           五惠
         </div>
-        <div className="leading-tight">
-          <div className="text-sm font-semibold">智慧環境5S巡檢</div>
+        <div className="flex flex-col justify-center leading-tight">
+          <div className="text-[17px] font-bold tracking-wide">智慧環境5S巡檢系統</div>
           {email && <div className="text-[11px] text-white/70">{email}</div>}
         </div>
       </div>
