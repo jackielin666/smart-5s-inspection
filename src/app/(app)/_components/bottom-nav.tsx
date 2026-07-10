@@ -59,7 +59,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="safe-bottom sticky bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 backdrop-blur">
+    <nav className="safe-bottom sticky bottom-0 z-20 mx-auto grid w-full max-w-2xl grid-cols-5 border-t border-border bg-surface/95 backdrop-blur md:max-w-3xl">
       {tabs.map((tab) => {
         const active =
           tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href);
@@ -67,12 +67,12 @@ export function BottomNav() {
           <Link
             key={tab.href}
             href={tab.href}
-            className="flex flex-col items-center gap-1 py-2 text-[11px]"
+            className="flex flex-col items-center justify-center gap-1.5 py-3.5 text-xs"
             style={{ color: active ? 'var(--brand)' : 'var(--muted)' }}
           >
             <svg
-              width="24"
-              height="24"
+              width="28"
+              height="28"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
