@@ -1,8 +1,22 @@
-export default function Page() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
-      <h1 className="text-lg font-bold text-foreground">今日巡檢</h1>
-      <p className="text-sm text-muted">此功能建置中，將於後續步驟上線。</p>
-    </div>
-  );
+import { createClient } from '@/infrastructure/supabase/server';
+import { SupabaseInspectionRepository } from '@/infrastructure/repositories/supabase-inspection.repository';
+import { SupabaseMasterDataRepository } from '@/infrastructure/repositories/supabase-master-data.repository';
+import { getOrCreateTodayInspection } from '@/application/services/today-inspection.service';
+import { InspectionClient } from './_components/inspection-client';
+
+export default async function InspectionPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const inspectionRepo = new SupabaseInspectionRepository(supabase);
+  const masterDataRepo = new SupabaseMasterDataRepository(supabase);
+
+  const [{ inspection, results }, inspectors] = await Promise.all([
+    getOrCreateTodayInspection(inspectionRepo, user?.id ?? ''),
+    masterDataRepo.getInspectors(),
+  ]);
+
+  return <InspectionClient inspection={inspection} initialResults={results} inspectors={inspectors} />;
 }

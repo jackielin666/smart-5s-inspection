@@ -79,5 +79,6 @@ erDiagram
 
 1. 開 Supabase 後台 → SQL Editor → New query
 2. 貼上 `supabase/migrations/0001_init.sql` → Run
-3. 貼上 `supabase/seed/seed.sql` → Run
-4. Table Editor 應可看到 29 筆 `checklist_items`、10 筆 `responsible_units`、3 筆 `inspectors`
+3. 貼上 `supabase/migrations/0002_fix_inspection_unique_index.sql` → Run
+4. 貼上 `supabase/seed/seed.sql` → Run
+5. Table Editor 應可看到 29 筆 `checklist_items`、10 筆 `responsible_units`、3 筆 `inspectors`
