@@ -1,6 +1,7 @@
 import { createClient } from '@/infrastructure/supabase/server';
 import { SupabaseInspectionRepository } from '@/infrastructure/repositories/supabase-inspection.repository';
 import { SupabaseMasterDataRepository } from '@/infrastructure/repositories/supabase-master-data.repository';
+import { SupabaseDefectRepository } from '@/infrastructure/repositories/supabase-defect.repository';
 import { getOrCreateTodayInspection } from '@/application/services/today-inspection.service';
 import { InspectionClient } from './_components/inspection-client';
 
@@ -12,11 +13,23 @@ export default async function InspectionPage() {
 
   const inspectionRepo = new SupabaseInspectionRepository(supabase);
   const masterDataRepo = new SupabaseMasterDataRepository(supabase);
+  const defectRepo = new SupabaseDefectRepository(supabase);
 
-  const [{ inspection, results }, inspectors] = await Promise.all([
+  const [{ inspection, results }, inspectors, units] = await Promise.all([
     getOrCreateTodayInspection(inspectionRepo, user?.id ?? ''),
     masterDataRepo.getInspectors(),
+    masterDataRepo.getUnits(),
   ]);
 
-  return <InspectionClient inspection={inspection} initialResults={results} inspectors={inspectors} />;
+  const defects = await defectRepo.listByInspection(inspection.id);
+
+  return (
+    <InspectionClient
+      inspection={inspection}
+      initialResults={results}
+      inspectors={inspectors}
+      units={units}
+      initialDefects={defects}
+    />
+  );
 }
