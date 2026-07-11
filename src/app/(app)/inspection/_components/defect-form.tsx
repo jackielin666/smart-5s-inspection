@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Defect, ResponsibleUnit } from '@/domain/entities';
+import type { Defect, DefectPhoto, ResponsibleUnit } from '@/domain/entities';
 import { setDefectUnitsAction, updateDefectFieldsAction } from '../defect-actions';
+import { listPhotosAction } from '../photo-actions';
+import { PhotoUploader } from './photo-uploader';
 
 /** 缺失就地展開表單：缺失說明/改善建議/權責單位(複選)/改善期限/照片(P1-3b 接上傳) */
 export function DefectForm({
@@ -19,6 +21,19 @@ export function DefectForm({
   const [dueDate, setDueDate] = useState(defect.dueDate);
   const [unitIds, setUnitIds] = useState<Set<string>>(new Set(defect.unitIds));
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
+  const [photos, setPhotos] = useState<(DefectPhoto & { url: string })[] | null>(null);
+
+  // 載入此缺失既有照片
+  useEffect(() => {
+    let active = true;
+    setPhotos(null);
+    listPhotosAction(defect.id).then((list) => {
+      if (active) setPhotos(list);
+    });
+    return () => {
+      active = false;
+    };
+  }, [defect.id]);
 
   // 缺失切換（改回不合格還原時）同步最新內容
   const defectIdRef = useRef(defect.id);
@@ -140,9 +155,16 @@ export function DefectForm({
 
       <div>
         <label className="mb-1 block text-xs font-semibold text-foreground">缺失照片</label>
-        <div className="flex items-center gap-2 rounded-lg border border-dashed border-border bg-white px-3 py-3 text-sm text-muted">
-          📷 拍照 / 相簿上傳（下一步接上 Google Drive）
-        </div>
+        {photos === null ? (
+          <p className="text-xs text-muted">照片載入中…</p>
+        ) : (
+          <PhotoUploader
+            key={defect.id}
+            defectId={defect.id}
+            initialPhotos={photos}
+            onSaving={onSaving}
+          />
+        )}
       </div>
     </div>
   );
