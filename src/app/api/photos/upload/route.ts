@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/infrastructure/supabase/server';
 import { SupabaseDefectRepository } from '@/infrastructure/repositories/supabase-defect.repository';
-import { getStorageProvider } from '@/infrastructure/storage/google-drive';
+import { SupabaseStorageProvider } from '@/infrastructure/storage/supabase-storage';
 import { taipeiToday } from '@/domain/date';
 
 export async function POST(request: NextRequest) {
@@ -29,7 +29,8 @@ export async function POST(request: NextRequest) {
   const path = `${yyyy}/${mm}/${defect.inspectionId}/${defect.seqInDay}/${fileId}.jpg`;
 
   try {
-    const stored = await getStorageProvider().upload({
+    const storage = new SupabaseStorageProvider(supabase);
+    const stored = await storage.upload({
       folder: 'photos',
       path,
       content: buffer,
@@ -39,13 +40,13 @@ export async function POST(request: NextRequest) {
     const photo = await repo.addPhoto({
       defectId,
       kind,
-      storageProvider: 'google_drive',
+      storageProvider: 'supabase',
       storageKey: stored.key,
       thumbKey: null,
       sortOrder: existing.length,
       takenAt: new Date().toISOString(),
     });
-    return NextResponse.json({ photo: { ...photo, url: `/api/photos/raw/${stored.key}` } });
+    return NextResponse.json({ photo: { ...photo, url: stored.url } });
   } catch (e) {
     console.error('photo upload failed', e);
     const detail = e instanceof Error ? e.message : String(e);
