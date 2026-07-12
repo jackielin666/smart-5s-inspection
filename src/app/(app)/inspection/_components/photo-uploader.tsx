@@ -41,11 +41,11 @@ export function PhotoUploader({
         form.append('defectId', defectId);
         form.append('kind', 'before');
         const res = await fetch('/api/photos/upload', { method: 'POST', body: form });
-        if (!res.ok) throw new Error(await res.text());
-        const { photo } = await res.json();
-        setPhotos((prev) => [...prev, photo]);
-      } catch {
-        setError('部分照片上傳失敗，請重試');
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        setPhotos((prev) => [...prev, json.photo]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '照片上傳失敗，請重試');
       }
     }
     setBusy(false);

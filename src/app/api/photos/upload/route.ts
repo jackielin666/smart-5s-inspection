@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ photo: { ...photo, url: `/api/photos/raw/${stored.key}` } });
   } catch (e) {
     console.error('photo upload failed', e);
-    return NextResponse.json({ error: '上傳失敗，請稍後再試' }, { status: 500 });
+    const detail = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: `上傳失敗：${detail}` }, { status: 500 });
   }
 }

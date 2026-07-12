@@ -32,6 +32,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   );
   const [selectedInspectorIds, setSelectedInspectorIds] = useState(new Set(inspection.inspectorIds));
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
 
   const sections = useMemo(() => {
     const groups: { name: string; items: InspectionResult[] }[] = [];
@@ -54,25 +55,44 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     });
   }
 
+  function setPending(resultId: string, pending: boolean) {
+    setPendingDefectIds((prev) => {
+      const next = new Set(prev);
+      if (pending) next.add(resultId);
+      else next.delete(resultId);
+      return next;
+    });
+  }
+
   async function handleVerdict(resultId: string, verdict: ItemVerdict) {
     const current = results.find((r) => r.id === resultId);
     const nextVerdict = current?.verdict === verdict ? null : verdict; // 再點一次可取消
+    const needsDefect = !!nextVerdict && NEEDS_DEFECT.includes(nextVerdict);
+
+    // 立即反應：變色 + 需要缺失時馬上顯示展開區（建立中）
     setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, verdict: nextVerdict } : r)));
     markSaving(resultId, true);
-    await setVerdictAction(resultId, nextVerdict);
+    if (needsDefect && !defectsByResult[resultId]) setPending(resultId, true);
 
-    // 依判定同步缺失：非合格→確保有缺失單並展開；合格/取消→收合
-    if (nextVerdict && NEEDS_DEFECT.includes(nextVerdict)) {
-      const res = await ensureDefectForResult(inspection.id, resultId);
-      if (res.ok) setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defect }));
+    // 存判定與建/收缺失並行
+    const tasks: Promise<unknown>[] = [setVerdictAction(resultId, nextVerdict)];
+    if (needsDefect) {
+      tasks.push(
+        ensureDefectForResult(inspection.id, resultId).then((res) => {
+          if (res.ok) setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defect }));
+          setPending(resultId, false);
+        }),
+      );
     } else {
-      await removeDefectForResult(resultId);
+      tasks.push(removeDefectForResult(resultId));
       setDefectsByResult((prev) => {
         const next = { ...prev };
         delete next[resultId];
         return next;
       });
+      setPending(resultId, false);
     }
+    await Promise.all(tasks);
     markSaving(resultId, false);
   }
 
@@ -166,6 +186,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
                 key={item.id}
                 item={item}
                 defect={defectsByResult[item.id]}
+                pending={pendingDefectIds.has(item.id)}
                 units={units}
                 saving={savingIds.has(item.id)}
                 onVerdict={(v) => handleVerdict(item.id, v)}
@@ -185,6 +206,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
 function ItemCard({
   item,
   defect,
+  pending,
   units,
   saving,
   onVerdict,
@@ -195,6 +217,7 @@ function ItemCard({
 }: {
   item: InspectionResult;
   defect?: Defect;
+  pending?: boolean;
   units: ResponsibleUnit[];
   saving: boolean;
   onVerdict: (v: ItemVerdict) => void;
@@ -240,7 +263,15 @@ function ItemCard({
         })}
       </div>
 
-      {defect && <DefectForm defect={defect} units={units} onSaving={onDefectSaving} />}
+      {defect ? (
+        <DefectForm defect={defect} units={units} onSaving={onDefectSaving} />
+      ) : (
+        pending && (
+          <div className="mt-3 rounded-xl border border-fail/30 bg-fail/5 p-3 text-sm text-muted">
+            缺失欄位建立中…
+          </div>
+        )
+      )}
 
       {hasTempField && (
         <div className="mt-3 rounded-xl bg-background p-3">

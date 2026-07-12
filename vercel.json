@@ -1,4 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "regions": ["hnd1"],
+  "functions": {
+    "src/app/api/photos/upload/route.ts": {
+      "maxDuration": 30
+    }
+  }
 }
