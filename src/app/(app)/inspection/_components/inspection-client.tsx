@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
 import { setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
@@ -33,6 +33,9 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   const [selectedInspectorIds, setSelectedInspectorIds] = useState(new Set(inspection.inspectorIds));
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
+  // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
+  const latestVerdictRef = useRef(new Map<string, ItemVerdict | null>());
+  const opChainRef = useRef(new Map<string, Promise<void>>());
 
   const sections = useMemo(() => {
     const groups: { name: string; items: InspectionResult[] }[] = [];
@@ -72,35 +75,55 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   }
 
   async function handleVerdict(resultId: string, verdict: ItemVerdict) {
-    const current = results.find((r) => r.id === resultId);
-    const nextVerdict = current?.verdict === verdict ? null : verdict; // 再點一次可取消
+    // 以「最後一次點擊」為準（避免 state 尚未更新時連點判斷錯誤）
+    const currentVerdict = latestVerdictRef.current.has(resultId)
+      ? latestVerdictRef.current.get(resultId)
+      : (results.find((r) => r.id === resultId)?.verdict ?? null);
+    const nextVerdict = currentVerdict === verdict ? null : verdict; // 再點一次可取消
     const needsDefect = !!nextVerdict && NEEDS_DEFECT.includes(nextVerdict);
+    latestVerdictRef.current.set(resultId, nextVerdict);
+    const isLatest = () => latestVerdictRef.current.get(resultId) === nextVerdict;
 
-    // 立即反應：變色 + 需要缺失時馬上顯示展開區（建立中）
+    // 立即反應：變色 + 展開/收合，不等伺服器
     setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, verdict: nextVerdict } : r)));
     markSaving(resultId, true);
-    if (needsDefect && !defectsByResult[resultId]) setPending(resultId, true);
-
-    // 存判定與建/收缺失並行
-    const tasks: Promise<unknown>[] = [setVerdictAction(resultId, nextVerdict)];
     if (needsDefect) {
-      tasks.push(
-        ensureDefectForResult(inspection.id, resultId).then((res) => {
-          if (res.ok) setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defect }));
-          setPending(resultId, false);
-        }),
-      );
+      if (!defectsByResult[resultId]) setPending(resultId, true);
     } else {
-      tasks.push(removeDefectForResult(resultId));
+      setPending(resultId, false);
       setDefectsByResult((prev) => {
         const next = { ...prev };
         delete next[resultId];
         return next;
       });
-      setPending(resultId, false);
     }
-    await Promise.all(tasks);
-    markSaving(resultId, false);
+
+    // 同一項目的伺服器操作排隊執行；被更新的點擊「超越」的操作直接放棄
+    const prevOp = opChainRef.current.get(resultId) ?? Promise.resolve();
+    const op = prevOp
+      .then(async () => {
+        if (!isLatest()) return; // 已有更新的點擊，這次不用做了
+        await setVerdictAction(resultId, nextVerdict);
+        if (needsDefect) {
+          const res = await ensureDefectForResult(inspection.id, resultId);
+          if (isLatest() && res.ok) {
+            setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defect }));
+          }
+        } else {
+          await removeDefectForResult(resultId);
+        }
+      })
+      .catch(() => {
+        /* 網路錯誤時保持畫面，下次操作會重新同步 */
+      })
+      .finally(() => {
+        if (isLatest()) {
+          setPending(resultId, false);
+          markSaving(resultId, false);
+        }
+      });
+    opChainRef.current.set(resultId, op);
+    await op;
   }
 
   async function handleTempFacility(resultId: string, present: boolean) {
@@ -273,13 +296,15 @@ function ItemCard({
         })}
       </div>
 
-      {defect ? (
-        <DefectForm defect={defect} units={units} onSaving={onDefectSaving} />
-      ) : (
-        pending && (
-          <div className="mt-3 rounded-xl border border-fail/30 bg-fail/5 p-3 text-sm text-muted">
-            缺失欄位建立中…
-          </div>
+      {item.verdict && NEEDS_DEFECT.includes(item.verdict) && (
+        defect ? (
+          <DefectForm defect={defect} units={units} onSaving={onDefectSaving} />
+        ) : (
+          pending && (
+            <div className="mt-3 rounded-xl border border-fail/30 bg-fail/5 p-3 text-sm text-muted">
+              缺失欄位建立中…
+            </div>
+          )
         )
       )}
 
