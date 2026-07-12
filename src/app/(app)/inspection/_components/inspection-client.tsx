@@ -46,6 +46,13 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
 
   const doneCount = results.filter((r) => r.verdict).length;
 
+  // 畫面顯示 1~29 連號（紙本項次 2~30 仍存於快照，PDF 輸出用）
+  const displayNoById = useMemo(() => {
+    const map = new Map<string, number>();
+    results.forEach((r, i) => map.set(r.id, i + 1));
+    return map;
+  }, [results]);
+
   function markSaving(id: string, saving: boolean) {
     setSavingIds((prev) => {
       const next = new Set(prev);
@@ -185,6 +192,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
               <ItemCard
                 key={item.id}
                 item={item}
+                displayNo={displayNoById.get(item.id) ?? item.itemNoSnapshot}
                 defect={defectsByResult[item.id]}
                 pending={pendingDefectIds.has(item.id)}
                 units={units}
@@ -205,6 +213,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
 
 function ItemCard({
   item,
+  displayNo,
   defect,
   pending,
   units,
@@ -216,6 +225,7 @@ function ItemCard({
   onDefectSaving,
 }: {
   item: InspectionResult;
+  displayNo: number;
   defect?: Defect;
   pending?: boolean;
   units: ResponsibleUnit[];
@@ -235,9 +245,9 @@ function ItemCard({
           className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
           style={{ background: 'var(--brand)' }}
         >
-          {item.itemNoSnapshot}
+          {displayNo}
         </span>
-        <p className="flex-1 text-[15px] leading-snug text-foreground">{item.contentSnapshot}</p>
+        <p className="flex-1 text-[17px] font-bold leading-snug text-foreground">{item.contentSnapshot}</p>
         {saving && (
           <span className="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full" style={{ background: 'var(--brand)' }} />
         )}
