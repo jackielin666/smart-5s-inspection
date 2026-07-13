@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
-import { createInspectorAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
+import { createInspectorAction, setInspectionStatusAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
 import { addDefectForResult, deleteDefectAction, ensureDefectsForResult, removeDefectForResult } from '../defect-actions';
 import { DefectForm } from './defect-form';
 
@@ -40,6 +40,8 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   const [newInspectorName, setNewInspectorName] = useState('');
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
+  const [status, setStatus] = useState(inspection.status);
+  const [submitting, setSubmitting] = useState(false);
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
   const latestVerdictRef = useRef(new Map<string, ItemVerdict | null>());
   const opChainRef = useRef(new Map<string, Promise<void>>());
@@ -153,6 +155,40 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     markSaving(resultId, true);
     await deleteDefectAction(defectId);
     markSaving(resultId, false);
+  }
+
+  async function handleSubmit() {
+    // 漏填檢查（送出時才提醒，不打斷巡檢過程）
+    const missingVerdicts = results
+      .map((r, i) => ({ no: i + 1, r }))
+      .filter((x) => !x.r.verdict);
+    const failWithoutDetail: number[] = [];
+    results.forEach((r, i) => {
+      if (r.verdict && NEEDS_DEFECT.includes(r.verdict)) {
+        const ds = defectsByResult[r.id] ?? [];
+        const incomplete = ds.length === 0 || ds.some((d) => !d.description.trim() || d.unitIds.length === 0);
+        if (incomplete) failWithoutDetail.push(i + 1);
+      }
+    });
+
+    const warnings: string[] = [];
+    if (selectedInspectorIds.size === 0) warnings.push('• 尚未選擇檢查人員');
+    if (missingVerdicts.length > 0)
+      warnings.push(`• 有 ${missingVerdicts.length} 項未判定（第 ${missingVerdicts.map((x) => x.no).join('、')} 項）`);
+    if (failWithoutDetail.length > 0)
+      warnings.push(`• 有 ${failWithoutDetail.length} 項不合格未填缺失說明或權責單位（第 ${failWithoutDetail.join('、')} 項）`);
+
+    if (warnings.length > 0) {
+      const ok = confirm(`以下項目尚未完成：\n\n${warnings.join('\n')}\n\n仍要送出並標記完成嗎？`);
+      if (!ok) return;
+    }
+
+    setSubmitting(true);
+    const next = status === 'completed' ? 'draft' : 'completed';
+    await setInspectionStatusAction(inspection.id, next);
+    setStatus(next);
+    setSubmitting(false);
+    if (next === 'completed' && warnings.length === 0) alert('今日巡檢已標記完成 ✅');
   }
 
   async function handleToggleInspector(inspectorId: string) {
@@ -286,6 +322,24 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
           </div>
         </section>
       ))}
+
+      <div className="pt-2">
+        <button
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
+          style={{ background: status === 'completed' ? 'var(--pass)' : 'var(--brand)' }}
+        >
+          {submitting
+            ? '處理中…'
+            : status === 'completed'
+              ? '✓ 已完成（點此改回編輯）'
+              : '完成今日巡檢'}
+        </button>
+        <p className="mt-2 text-center text-xs text-muted">
+          已完成 {doneCount}/{results.length} 項 · 送出時會檢查漏填
+        </p>
+      </div>
     </div>
   );
 

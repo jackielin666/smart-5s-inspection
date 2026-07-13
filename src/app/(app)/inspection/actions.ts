@@ -81,3 +81,12 @@ export async function createInspectorAction(
     return { ok: false };
   }
 }
+
+export async function setInspectionStatusAction(
+  inspectionId: string,
+  status: 'draft' | 'completed',
+): Promise<{ ok: boolean }> {
+  const supabase = await createClient();
+  const { error } = await supabase.from('inspections').update({ status }).eq('id', inspectionId);
+  return { ok: !error };
+}
