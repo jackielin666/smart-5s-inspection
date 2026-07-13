@@ -11,10 +11,12 @@ export function PhotoUploader({
   defectId,
   initialPhotos,
   onSaving,
+  kind = 'before',
 }: {
   defectId: string;
   initialPhotos: PhotoItem[];
   onSaving: (saving: boolean) => void;
+  kind?: 'before' | 'after';
 }) {
   const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
   const [busy, setBusy] = useState(false);
@@ -39,7 +41,7 @@ export function PhotoUploader({
         const form = new FormData();
         form.append('file', compressed, 'photo.jpg');
         form.append('defectId', defectId);
-        form.append('kind', 'before');
+        form.append('kind', kind);
         const res = await fetch('/api/photos/upload', { method: 'POST', body: form });
         const json = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
