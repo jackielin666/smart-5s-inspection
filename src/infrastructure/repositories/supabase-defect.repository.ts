@@ -15,6 +15,7 @@ function mapDefect(row: Row): Defect {
     description: row.description,
     suggestion: row.suggestion,
     unitIds: (row.defect_units ?? []).map((u: Row) => u.unit_id),
+    areaName: row.area_name,
     dueDate: row.due_date,
     status: row.status,
     resolvedAt: row.resolved_at,
@@ -103,6 +104,7 @@ export class SupabaseDefectRepository implements DefectRepository {
         seq_in_day: defect.seqInDay,
         description: defect.description,
         suggestion: defect.suggestion,
+        area_name: defect.areaName,
         due_date: defect.dueDate,
         status: defect.status,
         qa_owner: defect.qaOwner,
@@ -121,6 +123,7 @@ export class SupabaseDefectRepository implements DefectRepository {
     const row: Row = {};
     if (patch.description !== undefined) row.description = patch.description;
     if (patch.suggestion !== undefined) row.suggestion = patch.suggestion;
+    if (patch.areaName !== undefined) row.area_name = patch.areaName;
     if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
     if (patch.resolutionNote !== undefined) row.resolution_note = patch.resolutionNote;
     if (patch.unitIds !== undefined) {

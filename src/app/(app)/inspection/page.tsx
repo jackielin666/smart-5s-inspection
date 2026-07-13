@@ -15,10 +15,11 @@ export default async function InspectionPage() {
   const masterDataRepo = new SupabaseMasterDataRepository(supabase);
   const defectRepo = new SupabaseDefectRepository(supabase);
 
-  const [{ inspection, results }, inspectors, units] = await Promise.all([
+  const [{ inspection, results }, inspectors, units, unitAreas] = await Promise.all([
     getOrCreateTodayInspection(inspectionRepo, user?.id ?? ''),
     masterDataRepo.getInspectors(),
     masterDataRepo.getUnits(),
+    masterDataRepo.getUnitAreas(),
   ]);
 
   const defects = await defectRepo.listByInspection(inspection.id);
@@ -29,6 +30,7 @@ export default async function InspectionPage() {
       initialResults={results}
       inspectors={inspectors}
       units={units}
+      unitAreas={unitAreas}
       initialDefects={defects}
     />
   );

@@ -1,20 +1,18 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit } from '@/domain/entities';
+import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
-import { setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
-import { ensureDefectForResult, removeDefectForResult } from '../defect-actions';
+import { createInspectorAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
+import { addDefectForResult, deleteDefectAction, ensureDefectsForResult, removeDefectForResult } from '../defect-actions';
 import { DefectForm } from './defect-form';
 
 const VERDICT_OPTIONS: { value: ItemVerdict; label: string; color: string }[] = [
   { value: 'pass', label: '合格', color: 'var(--pass)' },
   { value: 'fail', label: '不合格', color: 'var(--fail)' },
-  { value: 'pending', label: '待處理', color: 'var(--pending)' },
-  { value: 'recheck', label: '復驗', color: 'var(--recheck)' },
 ];
 
-/** 需要展開缺失表單的判定：不合格 / 待處理 / 復驗 */
+/** 需要展開缺失表單的判定 */
 const NEEDS_DEFECT: ItemVerdict[] = ['fail', 'pending', 'recheck'];
 
 type Props = {
@@ -22,15 +20,24 @@ type Props = {
   initialResults: InspectionResult[];
   inspectors: Inspector[];
   units: ResponsibleUnit[];
+  unitAreas: UnitArea[];
   initialDefects: Defect[];
 };
 
-export function InspectionClient({ inspection, initialResults, inspectors, units, initialDefects }: Props) {
+export function InspectionClient({ inspection, initialResults, inspectors, units, unitAreas, initialDefects }: Props) {
   const [results, setResults] = useState(initialResults);
-  const [defectsByResult, setDefectsByResult] = useState<Record<string, Defect>>(() =>
-    Object.fromEntries(initialDefects.filter((d) => d.resultId).map((d) => [d.resultId as string, d])),
-  );
+  const [defectsByResult, setDefectsByResult] = useState<Record<string, Defect[]>>(() => {
+    const map: Record<string, Defect[]> = {};
+    for (const d of initialDefects) {
+      if (!d.resultId) continue;
+      (map[d.resultId] ??= []).push(d);
+    }
+    return map;
+  });
+  const [inspectorList, setInspectorList] = useState(inspectors);
   const [selectedInspectorIds, setSelectedInspectorIds] = useState(new Set(inspection.inspectorIds));
+  const [addingInspector, setAddingInspector] = useState(false);
+  const [newInspectorName, setNewInspectorName] = useState('');
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
@@ -75,7 +82,6 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   }
 
   async function handleVerdict(resultId: string, verdict: ItemVerdict) {
-    // 以「最後一次點擊」為準（避免 state 尚未更新時連點判斷錯誤）
     const currentVerdict = latestVerdictRef.current.has(resultId)
       ? latestVerdictRef.current.get(resultId)
       : (results.find((r) => r.id === resultId)?.verdict ?? null);
@@ -88,7 +94,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, verdict: nextVerdict } : r)));
     markSaving(resultId, true);
     if (needsDefect) {
-      if (!defectsByResult[resultId]) setPending(resultId, true);
+      if (!defectsByResult[resultId]?.length) setPending(resultId, true);
     } else {
       setPending(resultId, false);
       setDefectsByResult((prev) => {
@@ -98,16 +104,16 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
       });
     }
 
-    // 同一項目的伺服器操作排隊執行；被更新的點擊「超越」的操作直接放棄
+    // 同一項目的伺服器操作排隊執行；被更新點擊「超越」的操作直接放棄
     const prevOp = opChainRef.current.get(resultId) ?? Promise.resolve();
     const op = prevOp
       .then(async () => {
-        if (!isLatest()) return; // 已有更新的點擊，這次不用做了
+        if (!isLatest()) return;
         await setVerdictAction(resultId, nextVerdict);
         if (needsDefect) {
-          const res = await ensureDefectForResult(inspection.id, resultId);
+          const res = await ensureDefectsForResult(inspection.id, resultId);
           if (isLatest() && res.ok) {
-            setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defect }));
+            setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defects }));
           }
         } else {
           await removeDefectForResult(resultId);
@@ -126,22 +132,26 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     await op;
   }
 
-  async function handleTempFacility(resultId: string, present: boolean) {
-    setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, tempFacilityPresent: present } : r)));
+  async function handleAddDefect(resultId: string) {
     markSaving(resultId, true);
-    const current = results.find((r) => r.id === resultId);
-    await setTempFacilityAction(resultId, present, current?.tempFacilityDesc ?? '');
+    const res = await addDefectForResult(inspection.id, resultId);
+    if (res.ok) {
+      setDefectsByResult((prev) => ({
+        ...prev,
+        [resultId]: [...(prev[resultId] ?? []), res.defect],
+      }));
+    }
     markSaving(resultId, false);
   }
 
-  function handleTempFacilityDesc(resultId: string, desc: string) {
-    setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, tempFacilityDesc: desc } : r)));
-  }
-
-  async function commitTempFacilityDesc(resultId: string) {
-    const current = results.find((r) => r.id === resultId);
+  async function handleDeleteDefect(resultId: string, defectId: string) {
+    if (!confirm('確定刪除此筆缺失？（照片與文字將一併移除）')) return;
+    setDefectsByResult((prev) => ({
+      ...prev,
+      [resultId]: (prev[resultId] ?? []).filter((d) => d.id !== defectId),
+    }));
     markSaving(resultId, true);
-    await setTempFacilityAction(resultId, current?.tempFacilityPresent ?? null, current?.tempFacilityDesc ?? '');
+    await deleteDefectAction(defectId);
     markSaving(resultId, false);
   }
 
@@ -154,6 +164,22 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
       return next;
     });
     await toggleInspectorAction(inspection.id, inspectorId, checked);
+  }
+
+  async function handleAddInspector() {
+    const name = newInspectorName.trim();
+    if (!name) return;
+    setAddingInspector(false);
+    setNewInspectorName('');
+    const res = await createInspectorAction(name);
+    if (res.ok) {
+      setInspectorList((prev) =>
+        prev.some((i) => i.id === res.inspector.id)
+          ? prev
+          : [...prev, { id: res.inspector.id, name: res.inspector.name, sortOrder: 99, isActive: true }],
+      );
+      await handleToggleInspector(res.inspector.id);
+    }
   }
 
   return (
@@ -181,7 +207,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
             </span>
           </div>
           <div className="flex flex-wrap gap-2">
-            {inspectors.map((ins) => {
+            {inspectorList.map((ins) => {
               const active = selectedInspectorIds.has(ins.id);
               return (
                 <button
@@ -198,7 +224,34 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
                 </button>
               );
             })}
+            <button
+              onClick={() => setAddingInspector((v) => !v)}
+              className="rounded-full border border-dashed px-3.5 py-1.5 text-sm font-medium text-muted transition active:scale-95"
+              style={{ borderColor: 'var(--border)' }}
+            >
+              ＋ 其他
+            </button>
           </div>
+          {addingInspector && (
+            <div className="mt-2 flex gap-2">
+              <input
+                type="text"
+                value={newInspectorName}
+                onChange={(e) => setNewInspectorName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddInspector()}
+                placeholder="輸入姓名"
+                autoFocus
+                className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
+              />
+              <button
+                onClick={handleAddInspector}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-white active:scale-95"
+                style={{ background: 'var(--brand)' }}
+              >
+                加入
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -216,13 +269,16 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
                 key={item.id}
                 item={item}
                 displayNo={displayNoById.get(item.id) ?? item.itemNoSnapshot}
-                defect={defectsByResult[item.id]}
+                defects={defectsByResult[item.id] ?? []}
                 pending={pendingDefectIds.has(item.id)}
                 units={units}
+                unitAreas={unitAreas}
                 saving={savingIds.has(item.id)}
                 onVerdict={(v) => handleVerdict(item.id, v)}
-                onTempFacility={(present) => handleTempFacility(item.id, present)}
-                onTempFacilityDesc={(desc) => handleTempFacilityDesc(item.id, desc)}
+                onAddDefect={() => handleAddDefect(item.id)}
+                onDeleteDefect={(defectId) => handleDeleteDefect(item.id, defectId)}
+                onTempFacility={(present) => handleTempFacilityChange(item.id, present)}
+                onTempFacilityDesc={(desc) => handleTempFacilityDescChange(item.id, desc)}
                 onCommitTempFacilityDesc={() => commitTempFacilityDesc(item.id)}
                 onDefectSaving={(s) => markSaving(item.id, s)}
               />
@@ -232,16 +288,38 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
       ))}
     </div>
   );
+
+  async function handleTempFacilityChange(resultId: string, present: boolean) {
+    setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, tempFacilityPresent: present } : r)));
+    markSaving(resultId, true);
+    const current = results.find((r) => r.id === resultId);
+    await setTempFacilityAction(resultId, present, current?.tempFacilityDesc ?? '');
+    markSaving(resultId, false);
+  }
+
+  function handleTempFacilityDescChange(resultId: string, desc: string) {
+    setResults((prev) => prev.map((r) => (r.id === resultId ? { ...r, tempFacilityDesc: desc } : r)));
+  }
+
+  async function commitTempFacilityDesc(resultId: string) {
+    const current = results.find((r) => r.id === resultId);
+    markSaving(resultId, true);
+    await setTempFacilityAction(resultId, current?.tempFacilityPresent ?? null, current?.tempFacilityDesc ?? '');
+    markSaving(resultId, false);
+  }
 }
 
 function ItemCard({
   item,
   displayNo,
-  defect,
+  defects,
   pending,
   units,
+  unitAreas,
   saving,
   onVerdict,
+  onAddDefect,
+  onDeleteDefect,
   onTempFacility,
   onTempFacilityDesc,
   onCommitTempFacilityDesc,
@@ -249,17 +327,21 @@ function ItemCard({
 }: {
   item: InspectionResult;
   displayNo: number;
-  defect?: Defect;
+  defects: Defect[];
   pending?: boolean;
   units: ResponsibleUnit[];
+  unitAreas: UnitArea[];
   saving: boolean;
   onVerdict: (v: ItemVerdict) => void;
+  onAddDefect: () => void;
+  onDeleteDefect: (defectId: string) => void;
   onTempFacility: (present: boolean) => void;
   onTempFacilityDesc: (desc: string) => void;
   onCommitTempFacilityDesc: () => void;
   onDefectSaving: (saving: boolean) => void;
 }) {
   const hasTempField = item.tempFacilityPresent !== null || item.contentSnapshot.includes('暫時性設施');
+  const showDefects = !!item.verdict && NEEDS_DEFECT.includes(item.verdict);
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
@@ -283,7 +365,7 @@ function ItemCard({
             <button
               key={opt.value}
               onClick={() => onVerdict(opt.value)}
-              className="rounded-xl border-2 py-3 text-sm font-semibold transition active:scale-[0.97]"
+              className="rounded-xl border-2 py-3 text-base font-semibold transition active:scale-[0.97]"
               style={
                 active
                   ? { background: opt.color, borderColor: opt.color, color: 'white' }
@@ -296,16 +378,34 @@ function ItemCard({
         })}
       </div>
 
-      {item.verdict && NEEDS_DEFECT.includes(item.verdict) && (
-        defect ? (
-          <DefectForm defect={defect} units={units} onSaving={onDefectSaving} />
-        ) : (
-          pending && (
+      {showDefects && (
+        <>
+          {defects.map((defect, i) => (
+            <DefectForm
+              key={defect.id}
+              defect={defect}
+              index={i + 1}
+              units={units}
+              unitAreas={unitAreas}
+              onSaving={onDefectSaving}
+              onDelete={defects.length > 1 ? () => onDeleteDefect(defect.id) : undefined}
+            />
+          ))}
+          {defects.length === 0 && pending && (
             <div className="mt-3 rounded-xl border border-fail/30 bg-fail/5 p-3 text-sm text-muted">
               缺失欄位建立中…
             </div>
-          )
-        )
+          )}
+          {defects.length > 0 && (
+            <button
+              onClick={onAddDefect}
+              className="mt-2.5 w-full rounded-xl border border-dashed py-2.5 text-sm font-medium transition active:scale-[0.98]"
+              style={{ borderColor: 'var(--fail)', color: 'var(--fail)', background: 'white' }}
+            >
+              ＋ 新增另一筆缺失（不同地點/單位再發生）
+            </button>
+          )}
+        </>
       )}
 
       {hasTempField && (

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MasterDataRepository } from '@/domain/repositories';
-import type { Inspector, ResponsibleUnit } from '@/domain/entities';
+import type { Inspector, ResponsibleUnit, UnitArea } from '@/domain/entities';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -49,6 +49,22 @@ export class SupabaseMasterDataRepository implements MasterDataRepository {
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     const { error } = await this.db.from('responsible_units').update(row).eq('id', id);
     if (error) throw error;
+  }
+
+  async getUnitAreas(): Promise<UnitArea[]> {
+    const { data, error } = await this.db
+      .from('unit_areas')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order');
+    if (error) throw error;
+    return (data ?? []).map((r: Row) => ({
+      id: r.id,
+      unitId: r.unit_id,
+      name: r.name,
+      sortOrder: r.sort_order,
+      isActive: r.is_active,
+    }));
   }
 
   async getInspectors(includeInactive = false): Promise<Inspector[]> {

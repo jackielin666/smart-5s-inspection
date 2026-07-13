@@ -13,6 +13,15 @@ export interface ResponsibleUnit {
   isActive: boolean;
 }
 
+/** 班別對應區域（例：資材班 → 冷凍庫/成品倉/…） */
+export interface UnitArea {
+  id: string;
+  unitId: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface Inspector {
   id: string;
   name: string;
@@ -74,6 +83,7 @@ export interface Defect {
   description: string;
   suggestion: string | null;
   unitIds: string[]; // 權責單位（可跨部門複選）
+  areaName: string | null; // 發生區域（文字快照）
   dueDate: string;   // 改善期限（預設 開立日 + 5 工作天）
   status: DefectStatus;
   resolvedAt: string | null;

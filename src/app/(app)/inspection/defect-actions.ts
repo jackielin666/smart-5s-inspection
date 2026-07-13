@@ -50,57 +50,92 @@ async function computeDueDate(
   return d.toISOString().slice(0, 10);
 }
 
-/** 判定為非合格時，確保此項目有一筆缺失（沿用先前軟刪除的、或新建） */
-export async function ensureDefectForResult(
+async function createDefect(inspectionId: string, resultId: string): Promise<Defect> {
+  const { supabase, repo, userId } = await ctx();
+  const today = taipeiToday();
+  const [dueDate, { count }] = await Promise.all([
+    computeDueDate(supabase, today),
+    supabase
+      .from('defects')
+      .select('id', { count: 'exact', head: true })
+      .eq('inspection_id', inspectionId)
+      .is('deleted_at', null),
+  ]);
+  return repo.create({
+    inspectionId,
+    resultId,
+    seqInDay: (count ?? 0) + 1,
+    description: '',
+    suggestion: null,
+    unitIds: [],
+    areaName: null,
+    dueDate,
+    status: 'open',
+    resolvedAt: null,
+    resolvedConfirmedBy: null,
+    resolutionNote: null,
+    qaOwner: userId || null,
+  });
+}
+
+/** 判定為不合格時，確保此項目至少有一筆缺失（還原先前軟刪除的、或新建），回傳全部 */
+export async function ensureDefectsForResult(
   inspectionId: string,
   resultId: string,
-): Promise<{ ok: true; defect: Defect } | { ok: false }> {
+): Promise<{ ok: true; defects: Defect[] } | { ok: false }> {
   try {
-    const { supabase, repo, userId } = await ctx();
+    const { supabase, repo } = await ctx();
 
-    // 一次查出此項目所有缺失（含已軟刪除），在程式端判斷，減少來回
     const { data: rows } = await supabase
       .from('defects')
       .select('id, deleted_at')
       .eq('result_id', resultId);
-    const active = (rows ?? []).find((r) => r.deleted_at === null);
-    if (active) {
-      const defect = await repo.findById(active.id);
-      if (defect) return { ok: true, defect };
-    }
-    const trashed = (rows ?? []).find((r) => r.deleted_at !== null);
-    if (trashed) {
-      // 改回合格又改回不合格 → 還原，保留原本文字與照片
-      await supabase.from('defects').update({ deleted_at: null }).eq('id', trashed.id);
-      const defect = await repo.findById(trashed.id);
-      if (defect) return { ok: true, defect };
+    const activeIds = (rows ?? []).filter((r) => r.deleted_at === null).map((r) => r.id);
+    const trashedIds = (rows ?? []).filter((r) => r.deleted_at !== null).map((r) => r.id);
+
+    if (activeIds.length === 0 && trashedIds.length > 0) {
+      // 改回合格又改回不合格 → 全部還原，保留文字與照片
+      await supabase.from('defects').update({ deleted_at: null }).in('id', trashedIds);
+    } else if (activeIds.length === 0) {
+      await createDefect(inspectionId, resultId);
     }
 
-    // 全新建立：期限計算與當日序號並行
-    const today = taipeiToday();
-    const [dueDate, { count }] = await Promise.all([
-      computeDueDate(supabase, today),
-      supabase
-        .from('defects')
-        .select('id', { count: 'exact', head: true })
-        .eq('inspection_id', inspectionId)
-        .is('deleted_at', null),
-    ]);
-    const defect = await repo.create({
-      inspectionId,
-      resultId,
-      seqInDay: (count ?? 0) + 1,
-      description: '',
-      suggestion: null,
-      unitIds: [],
-      dueDate,
-      status: 'open',
-      resolvedAt: null,
-      resolvedConfirmedBy: null,
-      resolutionNote: null,
-      qaOwner: userId || null,
-    });
+    const { data: full } = await supabase
+      .from('defects')
+      .select('*, defect_units(unit_id)')
+      .eq('result_id', resultId)
+      .is('deleted_at', null)
+      .order('created_at');
+    const defects: Defect[] = [];
+    for (const row of full ?? []) {
+      const d = await repo.findById(row.id);
+      if (d) defects.push(d);
+    }
+    return { ok: true, defects };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** 同一項目新增另一筆缺失（不同地點/單位再發生） */
+export async function addDefectForResult(
+  inspectionId: string,
+  resultId: string,
+): Promise<{ ok: true; defect: Defect } | { ok: false }> {
+  try {
+    const defect = await createDefect(inspectionId, resultId);
     return { ok: true, defect };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** 刪除單筆缺失（軟刪除+稽核） */
+export async function deleteDefectAction(defectId: string): Promise<{ ok: boolean }> {
+  try {
+    const { repo, userId } = await ctx();
+    await repo.softDelete(defectId, userId);
+    return { ok: true };
   } catch {
     return { ok: false };
   }
@@ -114,9 +149,8 @@ export async function removeDefectForResult(resultId: string): Promise<{ ok: boo
       .from('defects')
       .select('id')
       .eq('result_id', resultId)
-      .is('deleted_at', null)
-      .maybeSingle();
-    if (data) await repo.softDelete(data.id, userId);
+      .is('deleted_at', null);
+    for (const row of data ?? []) await repo.softDelete(row.id, userId);
     return { ok: true };
   } catch {
     return { ok: false };
@@ -125,7 +159,7 @@ export async function removeDefectForResult(resultId: string): Promise<{ ok: boo
 
 export async function updateDefectFieldsAction(
   defectId: string,
-  patch: { description?: string; suggestion?: string; dueDate?: string },
+  patch: { description?: string; suggestion?: string; dueDate?: string; areaName?: string | null },
 ): Promise<{ ok: boolean }> {
   try {
     const { repo } = await ctx();

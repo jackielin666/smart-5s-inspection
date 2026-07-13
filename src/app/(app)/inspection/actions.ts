@@ -52,3 +52,32 @@ export async function toggleInspectorAction(
     .eq('inspector_id', inspectorId);
   return { ok: !error };
 }
+
+export async function createInspectorAction(
+  name: string,
+): Promise<{ ok: true; inspector: { id: string; name: string } } | { ok: false }> {
+  try {
+    const supabase = await createClient();
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false };
+    // 已存在（含停用）→ 直接啟用沿用
+    const { data: existing } = await supabase
+      .from('inspectors')
+      .select('id, name')
+      .eq('name', trimmed)
+      .maybeSingle();
+    if (existing) {
+      await supabase.from('inspectors').update({ is_active: true }).eq('id', existing.id);
+      return { ok: true, inspector: existing };
+    }
+    const { data, error } = await supabase
+      .from('inspectors')
+      .insert({ name: trimmed, sort_order: 99 })
+      .select('id, name')
+      .single();
+    if (error || !data) return { ok: false };
+    return { ok: true, inspector: data };
+  } catch {
+    return { ok: false };
+  }
+}
