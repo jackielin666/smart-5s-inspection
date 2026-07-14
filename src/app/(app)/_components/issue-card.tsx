@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { DefectStatus, ResponsibleUnit } from '@/domain/entities';
 import type { IssueView } from '@/application/services/issues.service';
 import { formatFriendlyDate } from '@/domain/date';
@@ -28,15 +28,23 @@ export function IssueCard({
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const busyRef = useRef(false); // 防重複點擊（處理中直接忽略）
   const [description, setDescription] = useState(issue.description);
   const [dueDate, setDueDate] = useState(issue.dueDate);
   const beforePhotos = issue.photos.filter((p) => p.kind === 'before');
   const afterPhotos = issue.photos.filter((p) => p.kind === 'after');
 
   async function changeStatus(status: DefectStatus) {
+    if (busyRef.current || status === issue.status) return; // 處理中或狀態未變則忽略，防連鎖誤觸
+    if (status === 'resolved') {
+      const ok = confirm('確定將此缺失標記為「已改善」並移至已改善頁？');
+      if (!ok) return;
+    }
+    busyRef.current = true;
     setSaving(true);
     await setDefectStatusAction(issue.id, status);
     setSaving(false);
+    busyRef.current = false;
     if (status === 'resolved') {
       onResolved?.();
     } else {
@@ -170,25 +178,19 @@ export function IssueCard({
             />
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">缺失照片（可補照）</label>
-            <PhotoUploader
-              defectId={issue.id}
-              initialPhotos={beforePhotos.map((p) => ({
-                id: p.id,
-                defectId: issue.id,
-                kind: 'before',
-                storageProvider: 'supabase',
-                storageKey: '',
-                thumbKey: null,
-                sortOrder: 0,
-                takenAt: null,
-                url: p.url,
-              }))}
-              onSaving={setSaving}
-              kind="before"
-            />
-          </div>
+          {beforePhotos.length > 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-foreground">
+                缺失照片（原始，補照請至今日巡檢）
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {beforePhotos.map((p) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img key={p.id} src={p.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-semibold text-foreground">改善後照片</label>

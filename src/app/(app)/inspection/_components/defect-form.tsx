@@ -157,21 +157,34 @@ export function DefectForm({
         {selectedUnits.length === 0 ? (
           <p className="text-sm text-muted">先選擇權責單位，即出現該班別區域快選</p>
         ) : (
-          <div className="flex flex-wrap gap-1.5">
-            {areaOptions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => pickArea(a.name)}
-                className="rounded-full border px-3 py-1.5 text-sm transition active:scale-95"
-                style={
-                  areaName === a.name
-                    ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
-                    : { borderColor: 'var(--border)', color: 'var(--foreground)', background: 'white' }
-                }
-              >
-                {a.name}
-              </button>
-            ))}
+          <div className="space-y-2">
+            {selectedUnits.map((u) => {
+              const areasOfUnit = unitAreas.filter((a) => a.unitId === u.id);
+              if (areasOfUnit.length === 0) return null;
+              return (
+                <div key={u.id} className="rounded-lg border border-border bg-white p-2">
+                  <div className="mb-1.5 text-xs font-semibold" style={{ color: 'var(--brand)' }}>
+                    {u.name}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {areasOfUnit.map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => pickArea(a.name)}
+                        className="rounded-full border px-3 py-1.5 text-sm transition active:scale-95"
+                        style={
+                          areaName === a.name
+                            ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
+                            : { borderColor: 'var(--border)', color: 'var(--foreground)', background: 'white' }
+                        }
+                      >
+                        {a.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
             <button
               onClick={() => {
                 setCustomArea(true);
@@ -184,7 +197,7 @@ export function DefectForm({
                   : { borderColor: 'var(--border)', color: 'var(--muted)', background: 'white' }
               }
             >
-              自行填寫
+              自行填寫其他區域
             </button>
           </div>
         )}
