@@ -43,6 +43,14 @@ export interface InspectionPdfData {
   // 狀況說明：本日新缺失 + 前幾日未結案（依日期分組）
   notesByDate: { date: string; items: PdfDefect[] }[];
   photos: PdfDefect[]; // 攤平的照片頁資料（僅本日）
+  // 改善記錄：有改善後照片的缺失，改善前/後對比
+  improvements: {
+    seq: number;
+    date: string;
+    description: string;
+    before: PdfPhoto[];
+    after: PdfPhoto[];
+  }[];
 }
 
 function toRocDate(iso: string): string {
@@ -135,6 +143,15 @@ export async function buildInspectionPdfData(
     inspectors: (insp.inspection_inspectors ?? []).map((ii: Row) => ii.inspectors?.name).filter(Boolean),
     sections,
     notesByDate,
-    photos: todayDefects.filter((d) => d.photos.length > 0),
+    photos: todayDefects.filter((d) => d.photos.filter((p) => p.kind === 'before').length > 0),
+    improvements: [...todayDefects, ...olderDefects]
+      .filter((d) => d.photos.some((p) => p.kind === 'after'))
+      .map((d) => ({
+        seq: d.seq,
+        date: d.inspectionDate,
+        description: d.description,
+        before: d.photos.filter((p) => p.kind === 'before'),
+        after: d.photos.filter((p) => p.kind === 'after'),
+      })),
   };
 }

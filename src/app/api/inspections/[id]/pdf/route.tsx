@@ -21,17 +21,20 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   // 把照片下載成 data URI 內嵌（避免 PDF 端無法帶 cookie 讀受保護圖片）
   const storage = new SupabaseStorageProvider(supabase);
+  const allPhotos = [
+    ...data.photos.flatMap((d) => d.photos),
+    ...data.improvements.flatMap((im) => [...im.before, ...im.after]),
+  ];
   await Promise.all(
-    data.photos.flatMap((def) =>
-      def.photos.map(async (p) => {
-        try {
-          const { data: buf, mimeType } = await storage.download(p.storageKey);
-          p.src = `data:${mimeType};base64,${buf.toString('base64')}`;
-        } catch {
-          /* 圖片讀取失敗則略過 */
-        }
-      }),
-    ),
+    allPhotos.map(async (p) => {
+      if (p.src) return;
+      try {
+        const { data: buf, mimeType } = await storage.download(p.storageKey);
+        p.src = `data:${mimeType};base64,${buf.toString('base64')}`;
+      } catch {
+        /* 圖片讀取失敗則略過 */
+      }
+    }),
   );
 
   const buffer = await renderToBuffer(<InspectionDocument data={data} />);

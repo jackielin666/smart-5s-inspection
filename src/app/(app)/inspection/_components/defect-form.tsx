@@ -27,7 +27,7 @@ export function DefectForm({
   const [dueDate, setDueDate] = useState(defect.dueDate);
   const [unitIds, setUnitIds] = useState<Set<string>>(new Set(defect.unitIds));
   const [areaName, setAreaName] = useState(defect.areaName ?? '');
-  const [customArea, setCustomArea] = useState(false);
+  const [customAreaText, setCustomAreaText] = useState('');
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const [photos, setPhotos] = useState<(DefectPhoto & { url: string })[] | null>(null);
 
@@ -52,7 +52,7 @@ export function DefectForm({
       setDueDate(defect.dueDate);
       setUnitIds(new Set(defect.unitIds));
       setAreaName(defect.areaName ?? '');
-      setCustomArea(false);
+      setCustomAreaText('');
     }
   }, [defect]);
 
@@ -77,17 +77,36 @@ export function DefectForm({
     onSaving(false);
   }
 
-  async function pickArea(name: string) {
-    const next = areaName === name ? '' : name; // 再點一次取消
-    setAreaName(next);
-    setCustomArea(false);
-    await saveField({ areaName: next || null });
+  // 發生區域改為「可複選」：以「、」串接儲存
+  const areaSet = new Set(
+    (areaName ?? '')
+      .split('、')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+
+  async function toggleArea(name: string) {
+    const next = new Set(areaSet);
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    const joined = [...next].join('、');
+    setAreaName(joined);
+    await saveField({ areaName: joined || null });
+  }
+
+  async function addCustomArea() {
+    const name = customAreaText.trim();
+    if (!name || areaSet.has(name)) {
+      setCustomAreaText('');
+      return;
+    }
+    const joined = [...areaSet, name].join('、');
+    setAreaName(joined);
+    setCustomAreaText('');
+    await saveField({ areaName: joined || null });
   }
 
   const selectedUnits = units.filter((u) => unitIds.has(u.id));
-  // 區域快選：已選班別的區域聯集；未選班別時先不出現快選（提示先選單位）
-  const areaOptions = unitAreas.filter((a) => unitIds.has(a.unitId));
-  const areaIsPreset = areaOptions.some((a) => a.name === areaName);
 
   return (
     <div className="mt-3 space-y-3 rounded-xl border border-fail/30 bg-fail/5 p-3">
@@ -153,7 +172,13 @@ export function DefectForm({
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-semibold text-foreground">發生區域</label>
+        <label className="mb-1 block text-xs font-semibold text-foreground">
+          發生區域（可複選）
+        </label>
+        <div className="mb-1.5 text-sm">
+          <span className="text-muted">已選：</span>
+          {areaSet.size > 0 ? [...areaSet].join('、') : <span className="text-muted">（未選）</span>}
+        </div>
         {selectedUnits.length === 0 ? (
           <p className="text-sm text-muted">先選擇權責單位，即出現該班別區域快選</p>
         ) : (
@@ -170,10 +195,10 @@ export function DefectForm({
                     {areasOfUnit.map((a) => (
                       <button
                         key={a.id}
-                        onClick={() => pickArea(a.name)}
+                        onClick={() => toggleArea(a.name)}
                         className="rounded-full border px-3 py-1.5 text-sm transition active:scale-95"
                         style={
-                          areaName === a.name
+                          areaSet.has(a.name)
                             ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
                             : { borderColor: 'var(--border)', color: 'var(--foreground)', background: 'white' }
                         }
@@ -185,31 +210,23 @@ export function DefectForm({
                 </div>
               );
             })}
-            <button
-              onClick={() => {
-                setCustomArea(true);
-                if (areaIsPreset) setAreaName('');
-              }}
-              className="rounded-full border px-3 py-1.5 text-sm transition active:scale-95"
-              style={
-                customArea || (!areaIsPreset && areaName)
-                  ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
-                  : { borderColor: 'var(--border)', color: 'var(--muted)', background: 'white' }
-              }
-            >
-              自行填寫其他區域
-            </button>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customAreaText}
+                placeholder="自行填寫其他區域"
+                onChange={(e) => setCustomAreaText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && addCustomArea()}
+                className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
+              />
+              <button
+                onClick={addCustomArea}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-brand active:scale-95"
+              >
+                加入
+              </button>
+            </div>
           </div>
-        )}
-        {(customArea || (!areaIsPreset && areaName)) && selectedUnits.length > 0 && (
-          <input
-            type="text"
-            value={areaIsPreset ? '' : areaName}
-            placeholder="輸入區域名稱"
-            onChange={(e) => setAreaName(e.target.value)}
-            onBlur={() => saveField({ areaName: areaName || null })}
-            className="mt-2 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-          />
         )}
       </div>
 
