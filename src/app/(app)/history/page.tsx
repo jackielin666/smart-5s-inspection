@@ -1,8 +1,11 @@
-export default function Page() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 py-24 text-center">
-      <h1 className="text-lg font-bold text-foreground">歷史巡檢</h1>
-      <p className="text-sm text-muted">此功能建置中，將於後續步驟上線。</p>
-    </div>
-  );
+import { createClient } from '@/infrastructure/supabase/server';
+import { listInspectionHistory } from '@/application/services/history.service';
+import { HistoryClient } from './_components/history-client';
+
+export const dynamic = 'force-dynamic';
+
+export default async function HistoryPage() {
+  const supabase = await createClient();
+  const rows = await listInspectionHistory(supabase);
+  return <HistoryClient rows={rows} />;
 }
