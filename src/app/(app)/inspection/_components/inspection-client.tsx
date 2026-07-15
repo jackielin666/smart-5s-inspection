@@ -323,7 +323,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
         </section>
       ))}
 
-      <div className="pt-2">
+      <div className="space-y-2.5 pt-2">
         <button
           onClick={handleSubmit}
           disabled={submitting}
@@ -336,7 +336,16 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
               ? '✓ 已完成（點此改回編輯）'
               : '完成今日巡檢'}
         </button>
-        <p className="mt-2 text-center text-xs text-muted">
+        <a
+          href={`/api/inspections/${inspection.id}/pdf`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full rounded-2xl border-2 py-3.5 text-center text-base font-bold transition active:scale-[0.99]"
+          style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
+        >
+          產生 / 檢視 PDF 報表
+        </a>
+        <p className="text-center text-xs text-muted">
           已完成 {doneCount}/{results.length} 項 · 送出時會檢查漏填
         </p>
       </div>
