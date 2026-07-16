@@ -22,7 +22,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // 把照片下載成 data URI 內嵌（避免 PDF 端無法帶 cookie 讀受保護圖片）
   const storage = new SupabaseStorageProvider(supabase);
   const allPhotos = [
-    ...data.photos.flatMap((d) => d.photos),
+    ...data.notesByDate.flatMap((g) => g.items.flatMap((it) => it.photos)),
     ...data.improvements.flatMap((im) => [...im.before, ...im.after]),
   ];
   await Promise.all(

@@ -4,7 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
 import { createInspectorAction, setInspectionStatusAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
-import { addDefectForResult, deleteDefectAction, ensureDefectsForResult, removeDefectForResult } from '../defect-actions';
+import {
+  addDefectForResult,
+  deleteDefectAction,
+  ensureDefectsForResult,
+  listDefectsMissingBeforePhotoAction,
+  removeDefectForResult,
+} from '../defect-actions';
 import { DefectForm } from './defect-form';
 
 const VERDICT_OPTIONS: { value: ItemVerdict; label: string; color: string }[] = [
@@ -188,13 +194,30 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     if (failWithoutDetail.length > 0)
       warnings.push(`• 有 ${failWithoutDetail.length} 項不合格未填缺失說明或權責單位（第 ${failWithoutDetail.join('、')} 項）`);
 
+    const next = status === 'completed' ? 'draft' : 'completed';
+
+    // 強制拍照（僅在「送出並標記完成」時）：判異常一定要有改善前照片，否則不可送出
+    if (next === 'completed') {
+      const missingPhotos = await listDefectsMissingBeforePhotoAction(inspection.id);
+      if (missingPhotos.length > 0) {
+        const nos = [
+          ...new Set(
+            missingPhotos.map((m) => (m.resultId ? displayNoById.get(m.resultId) : undefined)).filter(Boolean),
+          ),
+        ].sort((a, b) => (a as number) - (b as number));
+        alert(
+          `以下不合格項目尚未上傳「改善前照片」，請補拍後才能送出：\n\n第 ${nos.join('、')} 項\n\n（判定異常一定要拍照上傳，這是規定）`,
+        );
+        return;
+      }
+    }
+
     if (warnings.length > 0) {
       const ok = confirm(`以下項目尚未完成：\n\n${warnings.join('\n')}\n\n仍要送出並標記完成嗎？`);
       if (!ok) return;
     }
 
     setSubmitting(true);
-    const next = status === 'completed' ? 'draft' : 'completed';
     await setInspectionStatusAction(inspection.id, next);
     setStatus(next);
     setSubmitting(false);

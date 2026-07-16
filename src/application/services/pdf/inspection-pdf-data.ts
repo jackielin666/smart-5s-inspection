@@ -28,6 +28,7 @@ export interface PdfDefect {
   unitNames: string[];
   areaName: string | null;
   inspectionDate: string;
+  status: string; // open / in_progress / resolved
   photos: PdfPhoto[];
 }
 
@@ -42,7 +43,6 @@ export interface InspectionPdfData {
   sections: { name: string; items: PdfResultRow[] }[];
   // 狀況說明：本日新缺失 + 前幾日未結案（依日期分組）
   notesByDate: { date: string; items: PdfDefect[] }[];
-  photos: PdfDefect[]; // 攤平的照片頁資料（僅本日）
   // 改善記錄：有改善後照片的缺失，改善前/後對比
   improvements: {
     seq: number;
@@ -111,6 +111,7 @@ export async function buildInspectionPdfData(
     unitNames: (d.defect_units ?? []).map((u: Row) => u.responsible_units?.name).filter(Boolean),
     areaName: d.area_name,
     inspectionDate: d.inspections?.inspection_date ?? inspDate,
+    status: d.status ?? 'open',
     photos: (d.defect_photos ?? [])
       .filter((p: Row) => !p.deleted_at)
       .sort((a: Row, b: Row) => a.sort_order - b.sort_order)
@@ -143,7 +144,6 @@ export async function buildInspectionPdfData(
     inspectors: (insp.inspection_inspectors ?? []).map((ii: Row) => ii.inspectors?.name).filter(Boolean),
     sections,
     notesByDate,
-    photos: todayDefects.filter((d) => d.photos.filter((p) => p.kind === 'before').length > 0),
     improvements: [...todayDefects, ...olderDefects]
       .filter((d) => d.photos.some((p) => p.kind === 'after'))
       .map((d) => ({

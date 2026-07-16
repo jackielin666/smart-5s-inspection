@@ -134,6 +134,30 @@ export async function addDefectForResult(
   }
 }
 
+/** 送出前檢查：回傳「尚未上傳改善前照片」的缺失（依 result_id 標示是哪一項） */
+export async function listDefectsMissingBeforePhotoAction(
+  inspectionId: string,
+): Promise<{ resultId: string | null; seqInDay: number }[]> {
+  try {
+    const { supabase } = await ctx();
+    const { data } = await supabase
+      .from('defects')
+      .select('result_id, seq_in_day, defect_photos(kind, deleted_at)')
+      .eq('inspection_id', inspectionId)
+      .is('deleted_at', null);
+    return (data ?? [])
+      .filter(
+        (d) =>
+          !((d.defect_photos ?? []) as { kind: string; deleted_at: string | null }[]).some(
+            (p) => p.kind === 'before' && !p.deleted_at,
+          ),
+      )
+      .map((d) => ({ resultId: d.result_id as string | null, seqInDay: d.seq_in_day as number }));
+  } catch {
+    return [];
+  }
+}
+
 /** 刪除單筆缺失（軟刪除+稽核） */
 export async function deleteDefectAction(defectId: string): Promise<{ ok: boolean }> {
   try {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import imageCompression from 'browser-image-compression';
 import type { DefectPhoto } from '@/domain/entities';
 import { deletePhotoAction, reorderPhotosAction } from '../photo-actions';
@@ -11,14 +11,21 @@ export function PhotoUploader({
   defectId,
   initialPhotos,
   onSaving,
+  onCountChange,
   kind = 'before',
 }: {
   defectId: string;
   initialPhotos: PhotoItem[];
   onSaving: (saving: boolean) => void;
+  onCountChange?: (count: number) => void;
   kind?: 'before' | 'after';
 }) {
   const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
+
+  useEffect(() => {
+    onCountChange?.(photos.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photos.length]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);

@@ -34,7 +34,13 @@ const s = StyleSheet.create({
   noteBody: { flex: 1, padding: 8 },
   noteDate: { fontWeight: 'bold', marginTop: 6, marginBottom: 2 },
   noteItem: { marginBottom: 3, paddingLeft: 8 },
-  signRow: { flexDirection: 'row', marginTop: 12, gap: 20, paddingHorizontal: 4 },
+  // 簽核區：三欄平均分配、留高度給簽名
+  signRow: { flexDirection: 'row', marginTop: 20 },
+  signCell: { flex: 1, paddingHorizontal: 10 },
+  signLabel: { fontSize: 10, textAlign: 'center', marginBottom: 4 },
+  signSpace: { height: 34, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 2 },
+  signName: { fontSize: 9, textAlign: 'center' },
+  signUnderline: { borderTopWidth: 1, borderColor: BORDER, marginTop: 2 },
   h2: { fontSize: 12, textAlign: 'center', marginVertical: 6, fontWeight: 'bold' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   photoBox: { width: '50%', height: 248, padding: 4 },
@@ -69,14 +75,22 @@ function Header({ d }: { d: InspectionPdfData }) {
 }
 
 export function InspectionDocument({ data }: { data: InspectionPdfData }) {
-  const photos = data.photos.flatMap((def) =>
-    def.photos.map((p) => ({ ...p, seq: def.seq, date: def.inspectionDate, desc: def.description })),
+  const mmdd = (iso: string) => iso.slice(5).replace('-', '/');
+
+  // 照片頁＝狀況說明（第2頁）上每一筆「未結案」缺失的改善前照片，逐筆對應
+  // 標號與第2頁一致：同一日期群組內的流水號（1. 2. 3.…）
+  const openPhotos = data.notesByDate.flatMap((grp) =>
+    grp.items.flatMap((it, i) =>
+      it.status === 'resolved'
+        ? []
+        : it.photos
+            .filter((p) => p.kind === 'before')
+            .map((p) => ({ src: p.src, label: `${mmdd(grp.date)}-${i + 1}`, desc: it.description })),
+    ),
   );
   // 每頁 6 張（2×3）
-  const photoPages: (typeof photos)[] = [];
-  for (let i = 0; i < photos.length; i += 6) photoPages.push(photos.slice(i, i + 6));
-
-  const mmdd = (iso: string) => iso.slice(5).replace('-', '/');
+  const photoPages: (typeof openPhotos)[] = [];
+  for (let i = 0; i < openPhotos.length; i += 6) photoPages.push(openPhotos.slice(i, i + 6));
 
   return (
     <Document>
@@ -121,7 +135,7 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                       <View key={it.itemNo} style={isLastRow ? s.rowLast : s.row}>
                         <View style={s.itemCell}>
                           <Text>
-                            {it.itemNo}. {it.content}
+                            {it.itemNo - 1}. {it.content}
                           </Text>
                         </View>
                         <View style={s.resCell}>
@@ -162,25 +176,38 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
           </View>
         </View>
         <View style={s.signRow}>
-          <Text>廠長︰＿＿＿＿＿</Text>
-          <Text>衛生管理人員︰＿＿＿＿＿</Text>
-          <Text>檢查人員︰{data.inspectors.join('/')}</Text>
+          <View style={s.signCell}>
+            <Text style={s.signLabel}>廠長</Text>
+            <View style={s.signSpace} />
+            <View style={s.signUnderline} />
+          </View>
+          <View style={s.signCell}>
+            <Text style={s.signLabel}>衛生管理人員</Text>
+            <View style={s.signSpace} />
+            <View style={s.signUnderline} />
+          </View>
+          <View style={s.signCell}>
+            <Text style={s.signLabel}>檢查人員</Text>
+            <View style={s.signSpace}>
+              <Text style={s.signName}>{data.inspectors.join('、')}</Text>
+            </View>
+            <View style={s.signUnderline} />
+          </View>
         </View>
         <Text style={s.formCode}>{data.formCode}</Text>
       </Page>
 
-      {/* 第 3 頁起：缺失照片 2×3 */}
+      {/* 第 3 頁起：未結案缺失照片 2×3（對應第2頁狀況說明） */}
       {photoPages.map((pg, pi) => (
         <Page key={pi} size="A4" style={s.page}>
           <Header d={data} />
+          <Text style={s.h2}>缺失照片（對應狀況說明）</Text>
           <View style={s.photoGrid}>
             {pg.map((p, i) => (
               <View key={i} style={s.photoBox}>
                 <View style={s.photoInner}>
                   {p.src ? <Image style={s.photo} src={p.src} /> : null}
-                  <Text style={s.photoCaption}>
-                    {p.seq}.({mmdd(p.date)})
-                  </Text>
+                  <Text style={s.photoCaption}>{p.label}</Text>
                 </View>
               </View>
             ))}

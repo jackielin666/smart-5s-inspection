@@ -37,6 +37,9 @@ export function IssueCard({
   const [confirmedBy, setConfirmedBy] = useState<string>(issue.resolvedByName ?? '');
   const beforePhotos = issue.photos.filter((p) => p.kind === 'before');
   const afterPhotos = issue.photos.filter((p) => p.kind === 'after');
+  // 改善後照片即時張數（含本次剛上傳的），用於「結案必拍」檢查
+  const [afterCount, setAfterCount] = useState(afterPhotos.length);
+  const [submitted, setSubmitted] = useState(false); // 送出後鎖定按鈕
 
   // 展開時預帶目前操作人員（今日巡檢所選）作為確認人員預設
   useEffect(() => {
@@ -59,15 +62,22 @@ export function IssueCard({
   }
 
   async function submit() {
-    if (busyRef.current) return;
-    if (pendingStatus === 'resolved' && !confirmedBy.trim()) {
+    if (busyRef.current || submitted) return;
+    // 凡走過必留痕跡：任何狀態送出都要選確認人員
+    if (!confirmedBy.trim()) {
       alert('請先選擇確認人員');
+      return;
+    }
+    // 結案必拍改善後照片
+    if (pendingStatus === 'resolved' && afterCount === 0) {
+      alert('標記「已改善」前，請先上傳改善後照片');
       return;
     }
     busyRef.current = true;
     setSaving(true);
     await setDefectStatusAction(issue.id, pendingStatus, confirmedBy.trim() || undefined);
     setSaving(false);
+    setSubmitted(true); // 送出後鎖定，不可重複按
     busyRef.current = false;
     if (pendingStatus === 'resolved') {
       onResolved?.();
@@ -75,6 +85,11 @@ export function IssueCard({
       onChange?.({ ...issue, status: pendingStatus, resolvedByName: confirmedBy.trim() || null });
     }
   }
+
+  // 狀態或照片有變更時解鎖，允許再次送出
+  useEffect(() => {
+    setSubmitted(false);
+  }, [pendingStatus, afterCount, confirmedBy]);
 
   const meta = STATUS_META[issue.status];
   const statusChanged = pendingStatus !== issue.status;
@@ -180,6 +195,7 @@ export function IssueCard({
                 url: p.url,
               }))}
               onSaving={setSaving}
+              onCountChange={setAfterCount}
               kind="after"
             />
           </div>
@@ -239,17 +255,19 @@ export function IssueCard({
           {/* 3. 送出 */}
           <button
             onClick={submit}
-            disabled={saving || busyRef.current}
+            disabled={saving || busyRef.current || submitted}
             className="w-full rounded-xl py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
             style={{ background: statusChanged ? STATUS_META[pendingStatus].color : 'var(--brand)' }}
           >
             {saving
               ? '送出中…'
-              : pendingStatus === 'resolved'
-                ? '③ 送出並標記已改善'
-                : statusChanged
-                  ? `③ 送出（${STATUS_META[pendingStatus].label}）`
-                  : '③ 送出'}
+              : submitted
+                ? '✓ 已送出'
+                : pendingStatus === 'resolved'
+                  ? '③ 送出並標記已改善'
+                  : statusChanged
+                    ? `③ 送出（${STATUS_META[pendingStatus].label}）`
+                    : '③ 送出'}
           </button>
         </div>
       )}
@@ -280,24 +298,47 @@ export function IssueCard({
               {formatFriendlyDate(issue.resolvedAt.slice(0, 10))}
             </div>
           )}
-          {beforePhotos.length > 0 && <PhotoStrip title="原始照片" photos={beforePhotos} />}
-          {afterPhotos.length > 0 && <PhotoStrip title="改善後照片" photos={afterPhotos} />}
+          {(beforePhotos.length > 0 || afterPhotos.length > 0) && (
+            <BeforeAfterCompare before={beforePhotos} after={afterPhotos} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function PhotoStrip({ title, photos }: { title: string; photos: { id: string; url: string }[] }) {
+/** 改善前｜改善後 並排比對（左右對照，逐張配對） */
+function BeforeAfterCompare({
+  before,
+  after,
+}: {
+  before: { id: string; url: string }[];
+  after: { id: string; url: string }[];
+}) {
+  const rows = Math.max(before.length, after.length);
   return (
     <div>
-      <div className="mb-1 text-xs font-semibold text-muted">{title}</div>
-      <div className="grid grid-cols-3 gap-2">
-        {photos.map((p) => (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img key={p.id} src={p.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+      <div className="mb-1 grid grid-cols-2 gap-2 text-xs font-semibold text-muted">
+        <span>改善前</span>
+        <span>改善後</span>
+      </div>
+      <div className="space-y-2">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="grid grid-cols-2 gap-2">
+            <PhotoCell photo={before[i]} />
+            <PhotoCell photo={after[i]} />
+          </div>
         ))}
       </div>
     </div>
+  );
+}
+
+function PhotoCell({ photo }: { photo?: { id: string; url: string } }) {
+  if (!photo)
+    return <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted">—</div>;
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img src={photo.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
   );
 }
