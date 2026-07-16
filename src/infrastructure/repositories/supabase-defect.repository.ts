@@ -21,6 +21,8 @@ function mapDefect(row: Row): Defect {
     resolvedAt: row.resolved_at,
     resolvedConfirmedBy: row.resolved_confirmed_by,
     resolutionNote: row.resolution_note,
+    openedByName: row.opened_by_name ?? null,
+    resolvedByName: row.resolved_by_name ?? null,
     qaOwner: row.qa_owner,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -107,6 +109,7 @@ export class SupabaseDefectRepository implements DefectRepository {
         area_name: defect.areaName,
         due_date: defect.dueDate,
         status: defect.status,
+        opened_by_name: defect.openedByName ?? null,
         qa_owner: defect.qaOwner,
         created_by: defect.qaOwner,
       })
@@ -145,11 +148,12 @@ export class SupabaseDefectRepository implements DefectRepository {
     }
   }
 
-  async setStatus(id: string, status: DefectStatus, confirmedBy?: string): Promise<void> {
+  async setStatus(id: string, status: DefectStatus, confirmedBy?: string, confirmedByName?: string): Promise<void> {
     const row: Row = { status };
     if (status === 'resolved') {
       row.resolved_at = new Date().toISOString();
       row.resolved_confirmed_by = confirmedBy ?? null;
+      if (confirmedByName !== undefined) row.resolved_by_name = confirmedByName || null;
     }
     const { error } = await this.db.from('defects').update(row).eq('id', id);
     if (error) throw error;

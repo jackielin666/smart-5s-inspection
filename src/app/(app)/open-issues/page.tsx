@@ -7,9 +7,11 @@ export const dynamic = 'force-dynamic';
 
 export default async function OpenIssuesPage() {
   const supabase = await createClient();
-  const [issues, units] = await Promise.all([
+  const master = new SupabaseMasterDataRepository(supabase);
+  const [issues, units, inspectors] = await Promise.all([
     listOpenIssues(supabase),
-    new SupabaseMasterDataRepository(supabase).getUnits(),
+    master.getUnits(),
+    master.getInspectors(),
   ]);
-  return <OpenIssuesClient issues={issues} units={units} />;
+  return <OpenIssuesClient issues={issues} units={units} inspectors={inspectors} />;
 }

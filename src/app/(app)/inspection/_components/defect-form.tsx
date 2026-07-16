@@ -69,11 +69,26 @@ export function DefectForm({
 
   async function toggleUnit(unitId: string) {
     const next = new Set(unitIds);
-    if (next.has(unitId)) next.delete(unitId);
-    else next.add(unitId);
+    let areaChanged = false;
+    let nextAreaName = areaName;
+    if (next.has(unitId)) {
+      next.delete(unitId);
+      // 取消班別 → 移除該班別專屬的已選區域（自訂區域保留）
+      const removedAreas = new Set(unitAreas.filter((a) => a.unitId === unitId).map((a) => a.name));
+      const kept = (areaName ?? '')
+        .split('、')
+        .map((s) => s.trim())
+        .filter((s) => s && !removedAreas.has(s));
+      nextAreaName = kept.join('、');
+      areaChanged = nextAreaName !== areaName;
+    } else {
+      next.add(unitId);
+    }
     setUnitIds(next);
+    if (areaChanged) setAreaName(nextAreaName);
     onSaving(true);
     await setDefectUnitsAction(defect.id, [...next]);
+    if (areaChanged) await updateDefectFieldsAction(defect.id, { areaName: nextAreaName || null });
     onSaving(false);
   }
 
@@ -96,13 +111,27 @@ export function DefectForm({
 
   async function addCustomArea() {
     const name = customAreaText.trim();
-    if (!name || areaSet.has(name)) {
+    const current = new Set(
+      (areaName ?? '').split('、').map((x) => x.trim()).filter(Boolean),
+    );
+    if (!name || current.has(name)) {
       setCustomAreaText('');
       return;
     }
-    const joined = [...areaSet, name].join('、');
+    current.add(name);
+    const joined = [...current].join('、');
     setAreaName(joined);
     setCustomAreaText('');
+    await saveField({ areaName: joined || null });
+  }
+
+  async function removeArea(name: string) {
+    const current = (areaName ?? '')
+      .split('、')
+      .map((x) => x.trim())
+      .filter((x) => x && x !== name);
+    const joined = current.join('、');
+    setAreaName(joined);
     await saveField({ areaName: joined || null });
   }
 
@@ -175,9 +204,21 @@ export function DefectForm({
         <label className="mb-1 block text-xs font-semibold text-foreground">
           發生區域（可複選）
         </label>
-        <div className="mb-1.5 text-sm">
-          <span className="text-muted">已選：</span>
-          {areaSet.size > 0 ? [...areaSet].join('、') : <span className="text-muted">（未選）</span>}
+        <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-sm text-muted">已選：</span>
+          {areaSet.size === 0 && <span className="text-sm text-muted">（未選）</span>}
+          {[...areaSet].map((a) => (
+            <button
+              key={a}
+              type="button"
+              onClick={() => removeArea(a)}
+              className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-sm font-medium text-white"
+              style={{ background: 'var(--brand)' }}
+            >
+              {a}
+              <span className="text-white/80">✕</span>
+            </button>
+          ))}
         </div>
         {selectedUnits.length === 0 ? (
           <p className="text-sm text-muted">先選擇權責單位，即出現該班別區域快選</p>
@@ -220,6 +261,7 @@ export function DefectForm({
                 className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
               />
               <button
+                type="button"
                 onClick={addCustomArea}
                 className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-brand active:scale-95"
               >

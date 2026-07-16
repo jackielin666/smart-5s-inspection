@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
 import { createInspectorAction, setInspectionStatusAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
@@ -40,6 +40,16 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   const [newInspectorName, setNewInspectorName] = useState('');
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
+  const [operator, setOperator] = useState('');
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('wuhui_operator') : '';
+    if (saved) setOperator(saved);
+  }, []);
+  function chooseOperator(name: string) {
+    const next = operator === name ? '' : name;
+    setOperator(next);
+    if (typeof window !== 'undefined') localStorage.setItem('wuhui_operator', next);
+  }
   const [status, setStatus] = useState(inspection.status);
   const [submitting, setSubmitting] = useState(false);
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
@@ -113,7 +123,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
         if (!isLatest()) return;
         await setVerdictAction(resultId, nextVerdict);
         if (needsDefect) {
-          const res = await ensureDefectsForResult(inspection.id, resultId);
+          const res = await ensureDefectsForResult(inspection.id, resultId, operator || undefined);
           if (isLatest() && res.ok) {
             setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defects }));
           }
@@ -136,7 +146,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
 
   async function handleAddDefect(resultId: string) {
     markSaving(resultId, true);
-    const res = await addDefectForResult(inspection.id, resultId);
+    const res = await addDefectForResult(inspection.id, resultId, operator || undefined);
     if (res.ok) {
       setDefectsByResult((prev) => ({
         ...prev,
@@ -289,6 +299,31 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
             </div>
           )}
         </div>
+
+        <div className="mt-3 border-t border-border pt-3">
+          <div className="mb-1.5 text-sm font-medium text-foreground">
+            目前操作人員 <span className="text-xs font-normal text-muted">（記錄是誰開立缺失，可不選）</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {inspectorList.map((ins) => {
+              const active = operator === ins.name;
+              return (
+                <button
+                  key={ins.id}
+                  onClick={() => chooseOperator(ins.name)}
+                  className="rounded-full border px-3.5 py-1.5 text-sm font-medium transition active:scale-95"
+                  style={
+                    active
+                      ? { background: 'var(--recheck)', borderColor: 'var(--recheck)', color: 'white' }
+                      : { borderColor: 'var(--border)', color: 'var(--foreground)' }
+                  }
+                >
+                  {ins.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {sections.map((section) => (
@@ -333,8 +368,8 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
           {submitting
             ? '處理中…'
             : status === 'completed'
-              ? '✓ 已完成（點此改回編輯）'
-              : '完成今日巡檢'}
+              ? '✓ 已送出今日紀錄（點此改回編輯）'
+              : '送出今日紀錄'}
         </button>
         <a
           href={`/api/inspections/${inspection.id}/pdf`}

@@ -89,6 +89,8 @@ export interface Defect {
   resolvedAt: string | null;
   resolvedConfirmedBy: string | null;
   resolutionNote: string | null;
+  openedByName: string | null; // 開立人員（檢查人員姓名）
+  resolvedByName: string | null; // 確認/複檢人員姓名
   qaOwner: string | null; // 追蹤此單的品保（KPI 歸屬）
   createdAt: string;
   updatedAt: string;

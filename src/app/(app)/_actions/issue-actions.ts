@@ -16,18 +16,11 @@ async function ctx() {
 export async function setDefectStatusAction(
   defectId: string,
   status: DefectStatus,
+  confirmedByName?: string,
 ): Promise<{ ok: boolean }> {
   try {
-    const { supabase, repo, user } = await ctx();
-    await repo.setStatus(defectId, status, user?.id);
-    if (status === 'resolved' && user?.email) {
-      // 確認人員顯示名稱（欄位未建立時不阻斷）
-      try {
-        await supabase.from('defects').update({ resolved_by_name: user.email }).eq('id', defectId);
-      } catch {
-        /* resolved_by_name 欄位尚未建立 */
-      }
-    }
+    const { repo, user } = await ctx();
+    await repo.setStatus(defectId, status, user?.id, confirmedByName);
     return { ok: true };
   } catch {
     return { ok: false };

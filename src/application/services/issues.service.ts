@@ -27,12 +27,14 @@ export interface IssueView {
   dueDate: string;
   status: DefectStatus;
   resolvedAt: string | null;
+  openedByName: string | null;
+  resolvedByName: string | null;
   overdueDays: number; // >0 表示逾期天數
   photos: IssuePhoto[];
 }
 
 const ISSUE_SELECT = `
-  id, inspection_id, seq_in_day, description, suggestion, area_name, due_date, status, resolved_at,
+  id, inspection_id, seq_in_day, description, suggestion, area_name, due_date, status, resolved_at, opened_by_name, resolved_by_name,
   inspections ( inspection_date ),
   inspection_results ( item_no_snapshot, content_snapshot, section_name_snapshot ),
   defect_units ( unit_id, responsible_units ( name ) ),
@@ -73,6 +75,8 @@ function mapIssue(row: Row): IssueView {
     dueDate: due,
     status: row.status,
     resolvedAt: row.resolved_at,
+    openedByName: row.opened_by_name ?? null,
+    resolvedByName: row.resolved_by_name ?? null,
     overdueDays,
     photos,
   };

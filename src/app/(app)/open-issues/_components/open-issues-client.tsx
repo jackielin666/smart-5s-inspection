@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import type { ResponsibleUnit } from '@/domain/entities';
+import type { Inspector, ResponsibleUnit } from '@/domain/entities';
 import type { IssueView } from '@/application/services/issues.service';
 import { formatFriendlyDate } from '@/domain/date';
 import { IssueCard } from '../../_components/issue-card';
@@ -11,9 +11,11 @@ type SortKey = 'due' | 'date';
 export function OpenIssuesClient({
   issues: initial,
   units,
+  inspectors,
 }: {
   issues: IssueView[];
   units: ResponsibleUnit[];
+  inspectors: Inspector[];
 }) {
   const [issues, setIssues] = useState(initial);
   const [keyword, setKeyword] = useState('');
@@ -120,6 +122,7 @@ export function OpenIssuesClient({
               key={issue.id}
               issue={issue}
               units={units}
+              inspectors={inspectors}
               onChange={handleChange}
               onResolved={() => handleResolved(issue.id)}
             />

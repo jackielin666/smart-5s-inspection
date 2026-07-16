@@ -50,7 +50,7 @@ async function computeDueDate(
   return d.toISOString().slice(0, 10);
 }
 
-async function createDefect(inspectionId: string, resultId: string): Promise<Defect> {
+async function createDefect(inspectionId: string, resultId: string, openedByName?: string): Promise<Defect> {
   const { supabase, repo, userId } = await ctx();
   const today = taipeiToday();
   const [dueDate, { count }] = await Promise.all([
@@ -74,6 +74,8 @@ async function createDefect(inspectionId: string, resultId: string): Promise<Def
     resolvedAt: null,
     resolvedConfirmedBy: null,
     resolutionNote: null,
+    openedByName: openedByName || null,
+    resolvedByName: null,
     qaOwner: userId || null,
   });
 }
@@ -82,6 +84,7 @@ async function createDefect(inspectionId: string, resultId: string): Promise<Def
 export async function ensureDefectsForResult(
   inspectionId: string,
   resultId: string,
+  openedByName?: string,
 ): Promise<{ ok: true; defects: Defect[] } | { ok: false }> {
   try {
     const { supabase, repo } = await ctx();
@@ -97,7 +100,7 @@ export async function ensureDefectsForResult(
       // 改回合格又改回不合格 → 全部還原，保留文字與照片
       await supabase.from('defects').update({ deleted_at: null }).in('id', trashedIds);
     } else if (activeIds.length === 0) {
-      await createDefect(inspectionId, resultId);
+      await createDefect(inspectionId, resultId, openedByName);
     }
 
     const { data: full } = await supabase
@@ -121,9 +124,10 @@ export async function ensureDefectsForResult(
 export async function addDefectForResult(
   inspectionId: string,
   resultId: string,
+  openedByName?: string,
 ): Promise<{ ok: true; defect: Defect } | { ok: false }> {
   try {
-    const defect = await createDefect(inspectionId, resultId);
+    const defect = await createDefect(inspectionId, resultId, openedByName);
     return { ok: true, defect };
   } catch {
     return { ok: false };

@@ -1,10 +1,10 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import type { DefectStatus, ResponsibleUnit } from '@/domain/entities';
+import { useEffect, useRef, useState } from 'react';
+import type { DefectStatus, Inspector, ResponsibleUnit } from '@/domain/entities';
 import type { IssueView } from '@/application/services/issues.service';
 import { formatFriendlyDate } from '@/domain/date';
-import { setDefectStatusAction, setIssueUnitsAction, updateIssueFieldsAction } from '../_actions/issue-actions';
+import { setDefectStatusAction, updateIssueFieldsAction } from '../_actions/issue-actions';
 import { PhotoUploader } from '../inspection/_components/photo-uploader';
 
 const STATUS_META: Record<DefectStatus, { label: string; color: string }> = {
@@ -16,49 +16,39 @@ const STATUS_META: Record<DefectStatus, { label: string; color: string }> = {
 export function IssueCard({
   issue,
   units,
+  inspectors = [],
   onChange,
   onResolved,
   readOnly = false,
 }: {
   issue: IssueView;
   units: ResponsibleUnit[];
+  inspectors?: Inspector[];
   onChange?: (updated: IssueView) => void;
   onResolved?: () => void;
   readOnly?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const busyRef = useRef(false); // 防重複點擊（處理中直接忽略）
-  const [description, setDescription] = useState(issue.description);
+  const busyRef = useRef(false); // 防重複送出
   const [dueDate, setDueDate] = useState(issue.dueDate);
+  // 狀態改為本地暫存，按「送出」才寫入（先選狀態→拍照→送出）
+  const [pendingStatus, setPendingStatus] = useState<DefectStatus>(issue.status);
+  const [confirmedBy, setConfirmedBy] = useState<string>(issue.resolvedByName ?? '');
   const beforePhotos = issue.photos.filter((p) => p.kind === 'before');
   const afterPhotos = issue.photos.filter((p) => p.kind === 'after');
 
-  async function changeStatus(status: DefectStatus) {
-    if (busyRef.current || status === issue.status) return; // 處理中或狀態未變則忽略，防連鎖誤觸
-    if (status === 'resolved') {
-      const ok = confirm('確定將此缺失標記為「已改善」並移至已改善頁？');
-      if (!ok) return;
+  // 展開時預帶目前操作人員（今日巡檢所選）作為確認人員預設
+  useEffect(() => {
+    if (open && !confirmedBy) {
+      try {
+        const op = localStorage.getItem('wuhui_operator');
+        if (op) setConfirmedBy(op);
+      } catch {
+        /* ignore */
+      }
     }
-    busyRef.current = true;
-    setSaving(true);
-    await setDefectStatusAction(issue.id, status);
-    setSaving(false);
-    busyRef.current = false;
-    if (status === 'resolved') {
-      onResolved?.();
-    } else {
-      onChange?.({ ...issue, status });
-    }
-  }
-
-  async function saveDescription() {
-    if (description === issue.description) return;
-    setSaving(true);
-    await updateIssueFieldsAction(issue.id, { description });
-    setSaving(false);
-    onChange?.({ ...issue, description });
-  }
+  }, [open, confirmedBy]);
 
   async function saveDueDate(v: string) {
     setDueDate(v);
@@ -68,17 +58,27 @@ export function IssueCard({
     onChange?.({ ...issue, dueDate: v });
   }
 
-  async function toggleUnit(unitId: string) {
-    const has = issue.unitIds.includes(unitId);
-    const nextIds = has ? issue.unitIds.filter((x) => x !== unitId) : [...issue.unitIds, unitId];
-    const nextNames = units.filter((u) => nextIds.includes(u.id)).map((u) => u.name);
-    onChange?.({ ...issue, unitIds: nextIds, unitNames: nextNames });
+  async function submit() {
+    if (busyRef.current) return;
+    if (pendingStatus === 'resolved' && !confirmedBy.trim()) {
+      alert('請先選擇確認人員');
+      return;
+    }
+    busyRef.current = true;
     setSaving(true);
-    await setIssueUnitsAction(issue.id, nextIds);
+    await setDefectStatusAction(issue.id, pendingStatus, confirmedBy.trim() || undefined);
     setSaving(false);
+    busyRef.current = false;
+    if (pendingStatus === 'resolved') {
+      onResolved?.();
+    } else {
+      onChange?.({ ...issue, status: pendingStatus, resolvedByName: confirmedBy.trim() || null });
+    }
   }
 
   const meta = STATUS_META[issue.status];
+  const statusChanged = pendingStatus !== issue.status;
+  const inspectorNames = inspectors.map((i) => i.name);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -108,22 +108,51 @@ export function IssueCard({
           {issue.unitNames.length > 0 && <span>單位：{issue.unitNames.join('、')}</span>}
           {issue.areaName && <span>區域：{issue.areaName}</span>}
           <span>期限：{issue.dueDate}</span>
+          {issue.openedByName && <span>開立：{issue.openedByName}</span>}
         </div>
       </button>
 
       {open && !readOnly && (
         <div className="space-y-3 border-t border-border bg-background/50 p-4">
+          {/* 唯讀顯示：缺失內容、權責單位、發生區域 */}
+          <div className="space-y-1.5 rounded-xl border border-border bg-white p-3 text-sm">
+            {issue.description && (
+              <div>
+                <span className="text-xs font-semibold text-muted">缺失說明：</span>
+                <span className="text-foreground">{issue.description}</span>
+              </div>
+            )}
+            {issue.suggestion && (
+              <div>
+                <span className="text-xs font-semibold text-muted">改善建議：</span>
+                <span className="text-foreground">{issue.suggestion}</span>
+              </div>
+            )}
+            {issue.unitNames.length > 0 && (
+              <div>
+                <span className="text-xs font-semibold text-muted">權責單位：</span>
+                <span className="text-foreground">{issue.unitNames.join('、')}</span>
+              </div>
+            )}
+            {issue.areaName && (
+              <div>
+                <span className="text-xs font-semibold text-muted">發生區域：</span>
+                <span className="text-foreground">{issue.areaName}</span>
+              </div>
+            )}
+          </div>
+
+          {/* 1. 選狀態 */}
           <div>
-            <div className="mb-1.5 text-xs font-semibold text-foreground">狀態</div>
+            <div className="mb-1.5 text-xs font-semibold text-foreground">① 改善狀態</div>
             <div className="flex gap-2">
               {(['open', 'in_progress', 'resolved'] as DefectStatus[]).map((s) => (
                 <button
                   key={s}
-                  onClick={() => changeStatus(s)}
-                  disabled={saving}
+                  onClick={() => setPendingStatus(s)}
                   className="flex-1 rounded-lg border-2 py-2 text-sm font-semibold transition active:scale-95"
                   style={
-                    issue.status === s
+                    pendingStatus === s
                       ? { background: STATUS_META[s].color, borderColor: STATUS_META[s].color, color: 'white' }
                       : { borderColor: 'var(--border)', color: STATUS_META[s].color, background: 'white' }
                   }
@@ -134,66 +163,9 @@ export function IssueCard({
             </div>
           </div>
 
+          {/* 2. 改善後照片 */}
           <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">缺失說明</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              onBlur={saveDescription}
-              rows={2}
-              className="w-full resize-none rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">權責單位</label>
-            <div className="flex flex-wrap gap-1.5">
-              {units.map((u) => {
-                const active = issue.unitIds.includes(u.id);
-                return (
-                  <button
-                    key={u.id}
-                    onClick={() => toggleUnit(u.id)}
-                    className="rounded-full border px-3 py-1 text-sm transition active:scale-95"
-                    style={
-                      active
-                        ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
-                        : { borderColor: 'var(--border)', color: 'var(--foreground)' }
-                    }
-                  >
-                    {u.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">改善期限</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => saveDueDate(e.target.value)}
-              className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-            />
-          </div>
-
-          {beforePhotos.length > 0 && (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
-                缺失照片（原始，補照請至今日巡檢）
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {beforePhotos.map((p) => (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img key={p.id} src={p.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-foreground">改善後照片</label>
+            <div className="mb-1.5 text-xs font-semibold text-foreground">② 改善後照片</div>
             <PhotoUploader
               defectId={issue.id}
               initialPhotos={afterPhotos.map((p) => ({
@@ -212,7 +184,73 @@ export function IssueCard({
             />
           </div>
 
-          {saving && <p className="text-xs text-muted">儲存中…</p>}
+          {/* 確認人員 */}
+          <div>
+            <div className="mb-1.5 text-xs font-semibold text-foreground">
+              確認人員 {pendingStatus === 'resolved' && <span style={{ color: 'var(--fail)' }}>*</span>}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {inspectorNames.map((name) => {
+                const active = confirmedBy === name;
+                return (
+                  <button
+                    key={name}
+                    onClick={() => setConfirmedBy(active ? '' : name)}
+                    className="rounded-full border px-3 py-1 text-sm transition active:scale-95"
+                    style={
+                      active
+                        ? { background: 'var(--recheck)', borderColor: 'var(--recheck)', color: 'white' }
+                        : { borderColor: 'var(--border)', color: 'var(--foreground)', background: 'white' }
+                    }
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+              {inspectorNames.length === 0 && <span className="text-sm text-muted">尚無檢查人員資料</span>}
+            </div>
+          </div>
+
+          {/* 改善期限 */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-foreground">改善期限</label>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={(e) => saveDueDate(e.target.value)}
+              className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
+            />
+          </div>
+
+          {beforePhotos.length > 0 && (
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-foreground">
+                缺失原始照片（補照請至今日巡檢）
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {beforePhotos.map((p) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img key={p.id} src={p.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. 送出 */}
+          <button
+            onClick={submit}
+            disabled={saving || busyRef.current}
+            className="w-full rounded-xl py-3 text-sm font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+            style={{ background: statusChanged ? STATUS_META[pendingStatus].color : 'var(--brand)' }}
+          >
+            {saving
+              ? '送出中…'
+              : pendingStatus === 'resolved'
+                ? '③ 送出並標記已改善'
+                : statusChanged
+                  ? `③ 送出（${STATUS_META[pendingStatus].label}）`
+                  : '③ 送出'}
+          </button>
         </div>
       )}
 
@@ -224,15 +262,25 @@ export function IssueCard({
               {issue.suggestion}
             </div>
           )}
+          {issue.openedByName && (
+            <div>
+              <span className="text-xs font-semibold text-muted">開立人員：</span>
+              {issue.openedByName}
+            </div>
+          )}
+          {issue.resolvedByName && (
+            <div>
+              <span className="text-xs font-semibold text-muted">確認人員：</span>
+              {issue.resolvedByName}
+            </div>
+          )}
           {issue.resolvedAt && (
             <div>
               <span className="text-xs font-semibold text-muted">改善日期：</span>
               {formatFriendlyDate(issue.resolvedAt.slice(0, 10))}
             </div>
           )}
-          {beforePhotos.length > 0 && (
-            <PhotoStrip title="原始照片" photos={beforePhotos} />
-          )}
+          {beforePhotos.length > 0 && <PhotoStrip title="原始照片" photos={beforePhotos} />}
           {afterPhotos.length > 0 && <PhotoStrip title="改善後照片" photos={afterPhotos} />}
         </div>
       )}
