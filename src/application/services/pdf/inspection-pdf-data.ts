@@ -44,11 +44,13 @@ export interface InspectionPdfData {
   sections: { name: string; items: PdfResultRow[] }[];
   // 狀況說明：本日新缺失 + 前幾日未結案（依日期分組）
   notesByDate: { date: string; items: PdfDefect[] }[];
-  // 改善記錄：有改善後照片的缺失，改善前/後對比
+  // 改善記錄：有改善後照片的缺失，改善前/後對比（編號與狀況說明一致）
   improvements: {
     seq: number;
     date: string;
     description: string;
+    unitNames: string[];
+    areaName: string | null;
     before: PdfPhoto[];
     after: PdfPhoto[];
   }[];
@@ -92,16 +94,26 @@ function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefec
     .map(([date, items]) => ({ date, items }));
 }
 
-function toImprovements(defects: PdfDefect[]): InspectionPdfData['improvements'] {
-  return defects
-    .filter((d) => d.photos.some((p) => p.kind === 'after'))
-    .map((d) => ({
-      seq: d.seq,
-      date: d.inspectionDate,
-      description: d.description,
-      before: d.photos.filter((p) => p.kind === 'before'),
-      after: d.photos.filter((p) => p.kind === 'after'),
-    }));
+/** 改善記錄：從狀況說明分組取出有改善後照片者，編號沿用該日期組內序號 */
+function toImprovements(
+  groups: { date: string; items: PdfDefect[] }[],
+): InspectionPdfData['improvements'] {
+  const out: InspectionPdfData['improvements'] = [];
+  for (const g of groups) {
+    g.items.forEach((d, i) => {
+      if (!d.photos.some((p) => p.kind === 'after')) return;
+      out.push({
+        seq: i + 1,
+        date: d.inspectionDate,
+        description: d.description,
+        unitNames: d.unitNames,
+        areaName: d.areaName,
+        before: d.photos.filter((p) => p.kind === 'before'),
+        after: d.photos.filter((p) => p.kind === 'after'),
+      });
+    });
+  }
+  return out;
 }
 
 /** 組裝單次巡檢 PDF 所需資料（含未結案舊缺失往前帶） */
@@ -186,7 +198,7 @@ export async function buildInspectionPdfData(
     inspectors: inspectorNames,
     sections,
     notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(all),
+    improvements: toImprovements(groupNotesByDate(all)),
   };
 }
 
@@ -282,6 +294,6 @@ export async function buildDailyPdfData(
     inspectors,
     sections,
     notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(all),
+    improvements: toImprovements(groupNotesByDate(all)),
   };
 }

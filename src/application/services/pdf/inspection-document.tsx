@@ -46,8 +46,8 @@ const s = StyleSheet.create({
   // 2×3 一頁 6 張：高度 232 確保三列含頁首仍在一頁內
   photoBox: { width: '50%', height: 232, padding: 4 },
   photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', position: 'relative', backgroundColor: 'white' },
-  // contain：維持照片原比例不裁切
-  photo: { width: '100%', height: '100%', objectFit: 'contain' },
+  // contain：維持照片原比例不裁切；靠框左側對齊
+  photo: { width: '100%', height: '100%', objectFit: 'contain', objectPositionX: 0 },
   // 標示「序號.(日期)」：白底黑框，避免被照片顏色干擾
   photoCaption: {
     position: 'absolute',
@@ -67,7 +67,7 @@ const s = StyleSheet.create({
   impCol: { flex: 1, padding: 4 },
   impColBorder: { borderRightWidth: 1, borderColor: BORDER },
   impLabel: { textAlign: 'center', fontWeight: 'bold', marginBottom: 3, fontSize: 9 },
-  impImg: { width: '100%', height: 150, objectFit: 'cover' },
+  impImg: { width: '100%', height: 150, objectFit: 'contain', objectPositionX: 0, backgroundColor: 'white' },
   impDesc: { marginBottom: 3, fontWeight: 'bold' },
 });
 
@@ -183,8 +183,8 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                 {grp.items.map((it, i) => (
                   <Text key={i} style={s.noteItem}>
                     {i + 1}. {it.description}
-                    {it.areaName ? `（${it.areaName}）` : ''}
-                    {it.unitNames.length ? ` - ${it.unitNames.join('、')}` : ''}
+                    {it.areaName ? `「${it.areaName}」` : ''}
+                    {it.unitNames.length ? ` - 「${it.unitNames.join('、')}」` : ''}
                   </Text>
                 ))}
               </View>
@@ -241,6 +241,8 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
             <View key={i} wrap={false}>
               <Text style={s.impDesc}>
                 {im.seq}.({mmdd(im.date)}) {im.description}
+                {im.areaName ? `「${im.areaName}」` : ''}
+                {im.unitNames.length ? ` - 「${im.unitNames.join('、')}」` : ''}
               </Text>
               <View style={s.impRow}>
                 <View style={[s.impCol, s.impColBorder]}>
