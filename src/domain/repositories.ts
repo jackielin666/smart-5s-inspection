@@ -11,6 +11,7 @@ import type {
   Inspector,
   ItemVerdict,
   ResponsibleUnit,
+  UnitArea,
 } from './entities';
 
 export interface ChecklistRepository {
@@ -22,6 +23,9 @@ export interface MasterDataRepository {
   getUnits(includeInactive?: boolean): Promise<ResponsibleUnit[]>;
   createUnit(name: string): Promise<ResponsibleUnit>;
   updateUnit(id: string, patch: Partial<Pick<ResponsibleUnit, 'name' | 'sortOrder' | 'isActive'>>): Promise<void>;
+  getUnitAreas(includeInactive?: boolean): Promise<UnitArea[]>;
+  createUnitArea(unitId: string, name: string): Promise<UnitArea>;
+  updateUnitArea(id: string, patch: Partial<Pick<UnitArea, 'name' | 'sortOrder' | 'isActive'>>): Promise<void>;
   getInspectors(includeInactive?: boolean): Promise<Inspector[]>;
   createInspector(name: string): Promise<Inspector>;
   updateInspector(id: string, patch: Partial<Pick<Inspector, 'name' | 'sortOrder' | 'isActive'>>): Promise<void>;

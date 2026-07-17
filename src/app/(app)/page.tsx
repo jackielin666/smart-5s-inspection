@@ -50,6 +50,20 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      <Link
+        href="/settings"
+        className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
+      >
+        <span className="text-xl">⚙️</span>
+        <div className="flex-1">
+          <div className="font-bold text-foreground">設定管理</div>
+          <div className="text-sm text-muted">檢查人員 / 權責班別 / 發生區域 的新增與停用</div>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </Link>
+
       <p className="pt-2 text-center text-xs text-muted">
         P2 上線後這裡會顯示即時統計數字
       </p>
