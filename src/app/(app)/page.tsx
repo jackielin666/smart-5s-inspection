@@ -1,13 +1,46 @@
 import Link from 'next/link';
+import { createClient } from '@/infrastructure/supabase/server';
+import { taipeiToday } from '@/domain/date';
 
-const stats = [
-  { label: '今日巡檢', value: '—', href: '/inspection' },
-  { label: '本月巡檢', value: '—', href: '/history' },
-  { label: '本月缺失', value: '—', href: '/open-issues' },
-  { label: '未改善', value: '—', href: '/open-issues' },
-];
+export const dynamic = 'force-dynamic';
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const supabase = await createClient();
+  const today = taipeiToday();
+  const monthStart = `${today.slice(0, 7)}-01`;
+
+  const [{ data: monthForms }, { count: monthDefects }, { count: openDefects }] = await Promise.all([
+    supabase
+      .from('inspections')
+      .select('inspection_date, status')
+      .gte('inspection_date', monthStart)
+      .is('deleted_at', null),
+    supabase
+      .from('defects')
+      .select('id', { count: 'exact', head: true })
+      .gte('created_at', `${monthStart}T00:00:00+08:00`)
+      .is('deleted_at', null),
+    supabase
+      .from('defects')
+      .select('id', { count: 'exact', head: true })
+      .neq('status', 'resolved')
+      .is('deleted_at', null),
+  ]);
+
+  const todayForms = (monthForms ?? []).filter((f) => f.inspection_date === today);
+  const monthDays = new Set((monthForms ?? []).map((f) => f.inspection_date)).size;
+
+  const stats = [
+    {
+      label: '今日表單',
+      value: todayForms.length > 0 ? `${todayForms.length} 張` : '未開始',
+      href: '/inspection',
+    },
+    { label: '本月巡檢', value: `${monthDays} 天`, href: '/history' },
+    { label: '本月缺失', value: `${monthDefects ?? 0} 筆`, href: '/open-issues' },
+    { label: '未改善', value: `${openDefects ?? 0} 筆`, href: '/open-issues' },
+  ];
+
   return (
     <div className="space-y-6">
       <Link
@@ -25,7 +58,7 @@ export default function DashboardPage() {
         </div>
         <div className="flex-1">
           <div className="text-lg font-bold text-foreground">開始今日巡檢</div>
-          <div className="mt-0.5 text-sm text-muted">建立或續填今天的紀錄</div>
+          <div className="mt-0.5 text-sm text-muted">開新表單或續填今天的紀錄</div>
         </div>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="m9 18 6-6-6-6" />
@@ -41,7 +74,7 @@ export default function DashboardPage() {
               href={s.href}
               className="rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
             >
-              <div className="text-3xl font-bold" style={{ color: 'var(--brand)' }}>
+              <div className="text-2xl font-bold" style={{ color: 'var(--brand)' }}>
                 {s.value}
               </div>
               <div className="mt-1 text-sm text-muted">{s.label}</div>
@@ -63,10 +96,6 @@ export default function DashboardPage() {
           <path d="m9 18 6-6-6-6" />
         </svg>
       </Link>
-
-      <p className="pt-2 text-center text-xs text-muted">
-        P2 上線後這裡會顯示即時統計數字
-      </p>
     </div>
   );
 }

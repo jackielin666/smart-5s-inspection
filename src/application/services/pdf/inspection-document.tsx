@@ -34,12 +34,13 @@ const s = StyleSheet.create({
   noteBody: { flex: 1, padding: 8 },
   noteDate: { fontWeight: 'bold', marginTop: 6, marginBottom: 2 },
   noteItem: { marginBottom: 3, paddingLeft: 8 },
-  // 狀況說明格子表：序號/缺失/建議/區域/班別 對齊
+  // 狀況說明格子表：序號/缺失/建議/區域/班別 對齊；每格 View 包 Text → 自動換行、列高自動加高
   nTable: { borderWidth: 0.5, borderColor: '#666', marginTop: 2, marginBottom: 4 },
-  nRow: { flexDirection: 'row', borderTopWidth: 0.5, borderColor: '#666' },
-  nRowFirst: { flexDirection: 'row' },
+  nRow: { flexDirection: 'row', borderTopWidth: 0.5, borderColor: '#666', alignItems: 'stretch' },
+  nRowFirst: { flexDirection: 'row', alignItems: 'stretch' },
   nHead: { backgroundColor: '#f0f0f0' },
-  nSeq: { width: 20, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666', textAlign: 'center' },
+  nSeq: { width: 20, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666', justifyContent: 'center' },
+  nSeqText: { textAlign: 'center' },
   nDesc: { flex: 2.2, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
   nSugg: { flex: 1.6, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
   nArea: { flex: 1.1, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
@@ -192,19 +193,19 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                 <Text style={s.noteDate}>{mmdd(grp.date)}</Text>
                 <View style={s.nTable}>
                   <View style={[s.nRowFirst, s.nHead]}>
-                    <Text style={s.nSeq}>#</Text>
-                    <Text style={s.nDesc}>缺失說明</Text>
-                    <Text style={s.nSugg}>改善建議</Text>
-                    <Text style={s.nArea}>發生區域</Text>
-                    <Text style={s.nUnit}>權責班別</Text>
+                    <View style={s.nSeq}><Text style={s.nSeqText}>#</Text></View>
+                    <View style={s.nDesc}><Text>缺失說明</Text></View>
+                    <View style={s.nSugg}><Text>改善建議</Text></View>
+                    <View style={s.nArea}><Text>發生區域</Text></View>
+                    <View style={s.nUnit}><Text>權責班別</Text></View>
                   </View>
                   {grp.items.map((it, i) => (
                     <View key={i} style={s.nRow}>
-                      <Text style={s.nSeq}>{i + 1}</Text>
-                      <Text style={s.nDesc}>{it.description}</Text>
-                      <Text style={s.nSugg}>{it.suggestion ?? ''}</Text>
-                      <Text style={s.nArea}>{it.areaName ?? ''}</Text>
-                      <Text style={s.nUnit}>{it.unitNames.join('、')}</Text>
+                      <View style={s.nSeq}><Text style={s.nSeqText}>{i + 1}</Text></View>
+                      <View style={s.nDesc}><Text>{it.description}</Text></View>
+                      <View style={s.nSugg}><Text>{it.suggestion ?? ''}</Text></View>
+                      <View style={s.nArea}><Text>{it.areaName ?? ''}</Text></View>
+                      <View style={s.nUnit}><Text>{it.unitNames.join('、')}</Text></View>
                     </View>
                   ))}
                 </View>
