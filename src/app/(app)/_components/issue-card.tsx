@@ -6,6 +6,7 @@ import type { IssueView } from '@/application/services/issues.service';
 import { formatFriendlyDate } from '@/domain/date';
 import { setDefectStatusAction, updateIssueFieldsAction } from '../_actions/issue-actions';
 import { PhotoUploader } from '../inspection/_components/photo-uploader';
+import { AppDialog, type DialogState } from './app-dialog';
 
 const STATUS_META: Record<DefectStatus, { label: string; color: string }> = {
   open: { label: '未改善', color: 'var(--fail)' },
@@ -40,6 +41,7 @@ export function IssueCard({
   // 改善後照片即時張數（含本次剛上傳的），用於「結案必拍」檢查
   const [afterCount, setAfterCount] = useState(afterPhotos.length);
   const [submitted, setSubmitted] = useState(false); // 送出後鎖定按鈕
+  const [dialog, setDialog] = useState<DialogState | null>(null);
 
   async function saveDueDate(v: string) {
     setDueDate(v);
@@ -53,17 +55,17 @@ export function IssueCard({
     if (busyRef.current || submitted) return;
     // 凡走過必留痕跡：任何狀態送出都要選確認人員
     if (!confirmedBy.trim()) {
-      alert('請先選擇確認人員');
+      setDialog({ mode: 'alert', lines: ['請先選擇確認人員。'] });
       return;
     }
     // 結案必有改善前照片（補拍入口在今日巡檢），確保報告能前後對照
     if (pendingStatus === 'resolved' && beforePhotos.length === 0) {
-      alert('此缺失沒有「改善前照片」，請先至今日巡檢該項目補拍，才能結案');
+      setDialog({ mode: 'alert', lines: ['此缺失沒有「改善前照片」。', '請先至今日巡檢該項目補拍，才能結案。'] });
       return;
     }
     // 結案必拍改善後照片
     if (pendingStatus === 'resolved' && afterCount === 0) {
-      alert('標記「已改善」前，請先上傳改善後照片');
+      setDialog({ mode: 'alert', lines: ['標記「已改善」前，請先上傳改善後照片。'] });
       return;
     }
     busyRef.current = true;
@@ -296,6 +298,8 @@ export function IssueCard({
           )}
         </div>
       )}
+
+      <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
 }

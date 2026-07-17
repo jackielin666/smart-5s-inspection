@@ -166,11 +166,33 @@ export async function validateDefectsForSubmitAction(
   }
 }
 
-/** 刪除單筆缺失（軟刪除+稽核） */
+/** 刪除單筆缺失（軟刪除+稽核），刪除後其餘缺失序號即時遞補 */
 export async function deleteDefectAction(defectId: string): Promise<{ ok: boolean }> {
   try {
-    const { repo, userId } = await ctx();
+    const { supabase, repo, userId } = await ctx();
+    const { data: target } = await supabase
+      .from('defects')
+      .select('inspection_id')
+      .eq('id', defectId)
+      .maybeSingle();
     await repo.softDelete(defectId, userId);
+
+    // 序號遞補：同表單剩餘缺失依建立時間重排 1,2,3…
+    if (target?.inspection_id) {
+      const { data: rest } = await supabase
+        .from('defects')
+        .select('id, seq_in_day')
+        .eq('inspection_id', target.inspection_id)
+        .is('deleted_at', null)
+        .order('created_at');
+      let seq = 1;
+      for (const row of rest ?? []) {
+        if (row.seq_in_day !== seq) {
+          await supabase.from('defects').update({ seq_in_day: seq }).eq('id', row.id);
+        }
+        seq += 1;
+      }
+    }
     return { ok: true };
   } catch {
     return { ok: false };

@@ -43,6 +43,12 @@ function LoginForm() {
           <p className="mt-1 text-sm text-muted">品保部門專用</p>
         </div>
 
+        {params.get('reason') === 'idle' && (
+          <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-center text-sm text-amber-800">
+            閒置超過 15 分鐘已自動登出，請重新登入。
+          </p>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">Email</label>

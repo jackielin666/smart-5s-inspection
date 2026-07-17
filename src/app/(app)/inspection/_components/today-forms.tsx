@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Inspector } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
 import { createInspectorAction, createTodayFormAction } from '../actions';
+import { AppDialog, type DialogState } from '../../_components/app-dialog';
 
 export interface TodayFormRow {
   id: string;
@@ -39,6 +40,7 @@ export function TodayFormsClient({
   const [customName, setCustomName] = useState('');
   const [creating, setCreating] = useState(false);
   const [names, setNames] = useState(inspectors.map((i) => i.name));
+  const [dialog, setDialog] = useState<DialogState | null>(null);
 
   async function startForm(name: string) {
     if (creating) return;
@@ -47,7 +49,7 @@ export function TodayFormsClient({
     if (res.ok) {
       router.push(`/inspection?id=${res.id}`);
     } else {
-      alert('開立表單失敗，請重試');
+      setDialog({ mode: 'alert', lines: ['開立表單失敗，請重試。'] });
       setCreating(false);
     }
   }
@@ -176,6 +178,8 @@ export function TodayFormsClient({
       <p className="text-center text-xs text-muted">
         同一天可多張表單（不同人或同一人多次皆可）· 送出後鎖定不可修改
       </p>
+
+      <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
 }

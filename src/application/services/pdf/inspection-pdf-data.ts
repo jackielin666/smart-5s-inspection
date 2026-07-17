@@ -25,6 +25,7 @@ export interface PdfPhoto {
 export interface PdfDefect {
   seq: number;
   description: string;
+  suggestion: string | null;
   unitNames: string[];
   areaName: string | null;
   inspectionDate: string;
@@ -65,6 +66,7 @@ function makeMapDefect(fallbackDate: string) {
   return (d: Row): PdfDefect => ({
     seq: d.seq_in_day,
     description: d.description ?? '',
+    suggestion: d.suggestion ?? null,
     unitNames: (d.defect_units ?? []).map((u: Row) => u.responsible_units?.name).filter(Boolean),
     areaName: d.area_name,
     inspectionDate: d.inspections?.inspection_date ?? fallbackDate,

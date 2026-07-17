@@ -158,15 +158,20 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
       title: '提醒：刪除缺失',
       mode: 'confirm',
       okLabel: '確定刪除',
-      lines: ['確定刪除此筆缺失？', '照片與文字將一併移除。'],
+      lines: ['確定刪除此筆缺失？', '照片與文字將一併移除，後面缺失序號會自動遞補。'],
       onOk: async () => {
-        setDefectsByResult((prev) => ({
-          ...prev,
-          [resultId]: (prev[resultId] ?? []).filter((d) => d.id !== defectId),
-        }));
         markSaving(resultId, true);
-        await deleteDefectAction(defectId);
+        const res = await deleteDefectAction(defectId);
         markSaving(resultId, false);
+        if (res.ok) {
+          // 伺服器確認刪除成功才更新畫面（序號由排列順序自動遞補）
+          setDefectsByResult((prev) => ({
+            ...prev,
+            [resultId]: (prev[resultId] ?? []).filter((d) => d.id !== defectId),
+          }));
+        } else {
+          setDialog({ title: '提醒', mode: 'alert', lines: ['刪除失敗，請重試。'] });
+        }
       },
     });
   }
