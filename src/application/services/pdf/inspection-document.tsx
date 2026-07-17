@@ -106,8 +106,9 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
               <Text>區域位置： {data.area}</Text>
             </View>
           </View>
-          <View style={s.legend}>
+          <View style={[s.legend, { flexDirection: 'row', justifyContent: 'space-between' }]}>
             <Text>{data.legend}</Text>
+            {data.completionNote ? <Text>{data.completionNote}</Text> : null}
           </View>
 
           <View style={s.tHead}>

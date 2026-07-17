@@ -39,6 +39,7 @@ export interface InspectionPdfData {
   rocDate: string; // 民國年
   area: string;
   legend: string;
+  completionNote?: string; // 完成度（結算報告用，例：完成 27/29 項）
   inspectors: string[];
   sections: { name: string; items: PdfResultRow[] }[];
   // 狀況說明：本日新缺失 + 前幾日未結案（依日期分組）
@@ -56,6 +57,48 @@ export interface InspectionPdfData {
 function toRocDate(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return `${y - 1911} 年 ${String(m).padStart(2, '0')} 月 ${String(d).padStart(2, '0')} 日`;
+}
+
+function makeMapDefect(fallbackDate: string) {
+  return (d: Row): PdfDefect => ({
+    seq: d.seq_in_day,
+    description: d.description ?? '',
+    unitNames: (d.defect_units ?? []).map((u: Row) => u.responsible_units?.name).filter(Boolean),
+    areaName: d.area_name,
+    inspectionDate: d.inspections?.inspection_date ?? fallbackDate,
+    status: d.status ?? 'open',
+    photos: (d.defect_photos ?? [])
+      .filter((p: Row) => !p.deleted_at)
+      .sort((a: Row, b: Row) => a.sort_order - b.sort_order)
+      .map((p: Row) => ({ storageKey: p.storage_key, kind: p.kind })),
+  });
+}
+
+const DEFECT_SELECT =
+  '*, defect_units(responsible_units(name)), inspections(inspection_date), defect_photos(kind, storage_key, sort_order, deleted_at)';
+
+/** 依日期分組（新→舊），供第2頁狀況說明 */
+function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefect[] }[] {
+  const byDate = new Map<string, PdfDefect[]>();
+  for (const d of defects) {
+    if (!byDate.has(d.inspectionDate)) byDate.set(d.inspectionDate, []);
+    byDate.get(d.inspectionDate)!.push(d);
+  }
+  return [...byDate.entries()]
+    .sort((a, b) => b[0].localeCompare(a[0]))
+    .map(([date, items]) => ({ date, items }));
+}
+
+function toImprovements(defects: PdfDefect[]): InspectionPdfData['improvements'] {
+  return defects
+    .filter((d) => d.photos.some((p) => p.kind === 'after'))
+    .map((d) => ({
+      seq: d.seq,
+      date: d.inspectionDate,
+      description: d.description,
+      before: d.photos.filter((p) => p.kind === 'before'),
+      after: d.photos.filter((p) => p.kind === 'after'),
+    }));
 }
 
 /** 組裝單次巡檢 PDF 所需資料（含未結案舊缺失往前帶） */
@@ -122,34 +165,12 @@ export async function buildInspectionPdfData(
     .is('deleted_at', null)
     .lt('inspections.inspection_date', inspDate);
 
-  const mapDefect = (d: Row): PdfDefect => ({
-    seq: d.seq_in_day,
-    description: d.description ?? '',
-    unitNames: (d.defect_units ?? []).map((u: Row) => u.responsible_units?.name).filter(Boolean),
-    areaName: d.area_name,
-    inspectionDate: d.inspections?.inspection_date ?? inspDate,
-    status: d.status ?? 'open',
-    photos: (d.defect_photos ?? [])
-      .filter((p: Row) => !p.deleted_at)
-      .sort((a: Row, b: Row) => a.sort_order - b.sort_order)
-      .map((p: Row) => ({ storageKey: p.storage_key, kind: p.kind })),
-  });
-
+  const mapDefect = makeMapDefect(inspDate);
   const todayDefects = (todays ?? []).map(mapDefect);
   const olderDefects = (olderOpen ?? [])
     .filter((d: Row) => d.inspections?.inspection_date) // 關聯過濾
     .map(mapDefect);
-
-  // 依日期分組（今日在前，舊的依日期新→舊）
-  const byDate = new Map<string, PdfDefect[]>();
-  for (const d of [...todayDefects, ...olderDefects]) {
-    const key = d.inspectionDate;
-    if (!byDate.has(key)) byDate.set(key, []);
-    byDate.get(key)!.push(d);
-  }
-  const notesByDate = [...byDate.entries()]
-    .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([date, items]) => ({ date, items }));
+  const all = [...todayDefects, ...olderDefects];
 
   return {
     companyName: '五惠食品廠股份有限公司',
@@ -160,15 +181,102 @@ export async function buildInspectionPdfData(
     legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
     inspectors: inspectorNames,
     sections,
-    notesByDate,
-    improvements: [...todayDefects, ...olderDefects]
-      .filter((d) => d.photos.some((p) => p.kind === 'after'))
-      .map((d) => ({
-        seq: d.seq,
-        date: d.inspectionDate,
-        description: d.description,
-        before: d.photos.filter((p) => p.kind === 'before'),
-        after: d.photos.filter((p) => p.kind === 'after'),
-      })),
+    notesByDate: groupNotesByDate(all),
+    improvements: toImprovements(all),
+  };
+}
+
+/** 異常優先序：X > O > △ > V（多表單彙整時取最嚴重判定） */
+const VERDICT_PRIORITY = ['fail', 'recheck', 'pending', 'pass'];
+
+/**
+ * 當日彙整報告：跨當日所有表單彙整（結算後的正式版）
+ * - 同項目多表單判定衝突 → 不合格優先
+ * - 所有人都未判定的項目 → 空白（未完成），completionNote 標完成度
+ */
+export async function buildDailyPdfData(
+  db: SupabaseClient,
+  date: string,
+): Promise<InspectionPdfData | null> {
+  const { data: forms } = await db
+    .from('inspections')
+    .select('id, area, form_code, filled_by_name, created_at')
+    .eq('inspection_date', date)
+    .is('deleted_at', null)
+    .order('created_at');
+  if (!forms || forms.length === 0) return null;
+  const formIds = forms.map((f: Row) => f.id);
+
+  const { data: results } = await db
+    .from('inspection_results')
+    .select('*')
+    .in('inspection_id', formIds)
+    .order('item_no_snapshot');
+
+  // 依項次彙整：最嚴重判定優先
+  const byItem = new Map<number, { content: string; section: string; verdict: string | null }>();
+  for (const r of (results ?? []) as Row[]) {
+    const no = r.item_no_snapshot as number;
+    const cur = byItem.get(no);
+    if (!cur) {
+      byItem.set(no, { content: r.content_snapshot, section: r.section_name_snapshot, verdict: r.verdict });
+    } else if (r.verdict) {
+      const curIdx = cur.verdict ? VERDICT_PRIORITY.indexOf(cur.verdict) : Infinity;
+      const newIdx = VERDICT_PRIORITY.indexOf(r.verdict);
+      if (newIdx < curIdx) cur.verdict = r.verdict;
+    }
+  }
+
+  const sections: InspectionPdfData['sections'] = [];
+  let doneCount = 0;
+  for (const no of [...byItem.keys()].sort((a, b) => a - b)) {
+    const it = byItem.get(no)!;
+    if (it.verdict) doneCount += 1;
+    const row: PdfResultRow = {
+      itemNo: no,
+      content: it.content,
+      section: it.section,
+      symbol: it.verdict ? VERDICT_SYMBOL[it.verdict] ?? '' : '',
+    };
+    const last = sections[sections.length - 1];
+    if (last && last.name === row.section) last.items.push(row);
+    else sections.push({ name: row.section, items: [row] });
+  }
+
+  // 當日缺失（跨表單）＋ 前幾日未結案
+  const [{ data: todays }, { data: olderOpen }] = await Promise.all([
+    db.from('defects').select(DEFECT_SELECT).in('inspection_id', formIds).is('deleted_at', null).order('seq_in_day'),
+    db
+      .from('defects')
+      .select(DEFECT_SELECT)
+      .neq('status', 'resolved')
+      .is('deleted_at', null)
+      .lt('inspections.inspection_date', date),
+  ]);
+  const mapDefect = makeMapDefect(date);
+  const todayDefects = (todays ?? []).map(mapDefect);
+  const olderDefects = (olderOpen ?? [])
+    .filter((d: Row) => d.inspections?.inspection_date)
+    .map(mapDefect);
+  const all = [...todayDefects, ...olderDefects];
+
+  const inspectors: string[] = [];
+  for (const f of forms as Row[]) {
+    const n = f.filled_by_name as string | null;
+    if (n && !inspectors.includes(n)) inspectors.push(n);
+  }
+
+  return {
+    companyName: '五惠食品廠股份有限公司',
+    formTitle: '衛生檢查紀錄表',
+    formCode: (forms[0] as Row).form_code ?? 'S12501F',
+    rocDate: toRocDate(date),
+    area: (forms[0] as Row).area ?? '全廠每日',
+    legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
+    completionNote: `完成 ${doneCount}/${byItem.size} 項`,
+    inspectors,
+    sections,
+    notesByDate: groupNotesByDate(all),
+    improvements: toImprovements(all),
   };
 }

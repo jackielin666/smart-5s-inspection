@@ -307,13 +307,13 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
           </button>
         )}
         <a
-          href={`/api/inspections/${inspection.id}/pdf`}
+          href={`/api/reports/${inspection.inspectionDate}/pdf`}
           target="_blank"
           rel="noopener noreferrer"
           className="block w-full rounded-2xl border-2 py-3.5 text-center text-base font-bold transition active:scale-[0.99]"
           style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
         >
-          產生 / 檢視 PDF 報表
+          檢視當日報告 PDF（彙整所有表單）
         </a>
         <p className="text-center text-xs text-muted">
           已完成 {doneCount}/{results.length} 項{!readOnly && ' · 送出時會檢查漏填與缺照片'}
