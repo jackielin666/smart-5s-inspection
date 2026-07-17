@@ -13,6 +13,8 @@ function mapInspectionRow(row: Row): Inspection {
     area: row.area,
     formCode: row.form_code,
     status: row.status,
+    filledByName: row.filled_by_name ?? null,
+    submittedAt: row.submitted_at ?? null,
     inspectorIds: (row.inspection_inspectors ?? []).map((r: Row) => r.inspector_id),
     plantManagerSignedAt: row.plant_manager_signed_at,
     hygieneManagerSignedAt: row.hygiene_manager_signed_at,
@@ -41,16 +43,16 @@ function mapResultRow(row: Row): InspectionResult {
 export class SupabaseInspectionRepository implements InspectionRepository {
   constructor(private readonly db: SupabaseClient) {}
 
-  async findByDate(date: string, area = '全廠每日'): Promise<Inspection | null> {
+  async listByDate(date: string, area = '全廠每日'): Promise<Inspection[]> {
     const { data, error } = await this.db
       .from('inspections')
       .select(INSPECTION_SELECT)
       .eq('inspection_date', date)
       .eq('area', area)
       .is('deleted_at', null)
-      .maybeSingle();
+      .order('created_at');
     if (error) throw error;
-    return data ? mapInspectionRow(data) : null;
+    return (data ?? []).map(mapInspectionRow);
   }
 
   async findById(id: string): Promise<Inspection | null> {
@@ -66,12 +68,17 @@ export class SupabaseInspectionRepository implements InspectionRepository {
   async create(
     date: string,
     area: string,
-    inspectorIds: string[],
+    filledByName: string,
     createdBy: string,
   ): Promise<Inspection> {
     const { data: inspectionRow, error: insErr } = await this.db
       .from('inspections')
-      .insert({ inspection_date: date, area, created_by: createdBy || null })
+      .insert({
+        inspection_date: date,
+        area,
+        filled_by_name: filledByName || null,
+        created_by: createdBy || null,
+      })
       .select('*')
       .single();
     if (insErr) throw insErr;
@@ -95,16 +102,15 @@ export class SupabaseInspectionRepository implements InspectionRepository {
       if (resErr) throw resErr;
     }
 
-    if (inspectorIds.length > 0) {
-      const links = inspectorIds.map((inspector_id) => ({
-        inspection_id: inspectionRow.id,
-        inspector_id,
-      }));
-      const { error: linkErr } = await this.db.from('inspection_inspectors').insert(links);
-      if (linkErr) throw linkErr;
-    }
+    return mapInspectionRow(inspectionRow);
+  }
 
-    return { ...mapInspectionRow(inspectionRow), inspectorIds };
+  async submit(id: string): Promise<void> {
+    const { error } = await this.db
+      .from('inspections')
+      .update({ status: 'completed', submitted_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw error;
   }
 
   async update(id: string, patch: Partial<Inspection>): Promise<void> {

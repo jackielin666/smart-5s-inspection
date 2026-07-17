@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Defect, Inspection, InspectionResult, Inspector, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import { useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import type { Defect, Inspection, InspectionResult, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate } from '@/domain/date';
-import { createInspectorAction, setInspectionStatusAction, setTempFacilityAction, setVerdictAction, toggleInspectorAction } from '../actions';
+import { setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
 import {
   addDefectForResult,
   deleteDefectAction,
@@ -24,13 +25,12 @@ const NEEDS_DEFECT: ItemVerdict[] = ['fail', 'pending', 'recheck'];
 type Props = {
   inspection: Inspection;
   initialResults: InspectionResult[];
-  inspectors: Inspector[];
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
   initialDefects: Defect[];
 };
 
-export function InspectionClient({ inspection, initialResults, inspectors, units, unitAreas, initialDefects }: Props) {
+export function InspectionClient({ inspection, initialResults, units, unitAreas, initialDefects }: Props) {
   const [results, setResults] = useState(initialResults);
   const [defectsByResult, setDefectsByResult] = useState<Record<string, Defect[]>>(() => {
     const map: Record<string, Defect[]> = {};
@@ -40,24 +40,11 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
     }
     return map;
   });
-  const [inspectorList, setInspectorList] = useState(inspectors);
-  const [selectedInspectorIds, setSelectedInspectorIds] = useState(new Set(inspection.inspectorIds));
-  const [addingInspector, setAddingInspector] = useState(false);
-  const [newInspectorName, setNewInspectorName] = useState('');
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
-  const [operator, setOperator] = useState('');
-  useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('wuhui_operator') : '';
-    if (saved) setOperator(saved);
-  }, []);
-  function chooseOperator(name: string) {
-    const next = operator === name ? '' : name;
-    setOperator(next);
-    if (typeof window !== 'undefined') localStorage.setItem('wuhui_operator', next);
-  }
   const [status, setStatus] = useState(inspection.status);
   const [submitting, setSubmitting] = useState(false);
+  const readOnly = status === 'completed'; // 送出後鎖定唯讀
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
   const latestVerdictRef = useRef(new Map<string, ItemVerdict | null>());
   const opChainRef = useRef(new Map<string, Promise<void>>());
@@ -100,6 +87,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   }
 
   async function handleVerdict(resultId: string, verdict: ItemVerdict) {
+    if (readOnly) return;
     const currentVerdict = latestVerdictRef.current.has(resultId)
       ? latestVerdictRef.current.get(resultId)
       : (results.find((r) => r.id === resultId)?.verdict ?? null);
@@ -129,7 +117,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
         if (!isLatest()) return;
         await setVerdictAction(resultId, nextVerdict);
         if (needsDefect) {
-          const res = await ensureDefectsForResult(inspection.id, resultId, operator || undefined);
+          const res = await ensureDefectsForResult(inspection.id, resultId);
           if (isLatest() && res.ok) {
             setDefectsByResult((prev) => ({ ...prev, [resultId]: res.defects }));
           }
@@ -151,8 +139,9 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   }
 
   async function handleAddDefect(resultId: string) {
+    if (readOnly) return;
     markSaving(resultId, true);
-    const res = await addDefectForResult(inspection.id, resultId, operator || undefined);
+    const res = await addDefectForResult(inspection.id, resultId);
     if (res.ok) {
       setDefectsByResult((prev) => ({
         ...prev,
@@ -174,6 +163,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
   }
 
   async function handleSubmit() {
+    if (readOnly || submitting) return;
     // 漏填檢查（送出時才提醒，不打斷巡檢過程）
     const missingVerdicts = results
       .map((r, i) => ({ no: i + 1, r }))
@@ -187,73 +177,51 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
       }
     });
 
+    // 強制拍照：判異常一定要有改善前照片，否則不可送出（硬性擋下）
+    const missingPhotos = await listDefectsMissingBeforePhotoAction(inspection.id);
+    if (missingPhotos.length > 0) {
+      const nos = [
+        ...new Set(
+          missingPhotos.map((m) => (m.resultId ? displayNoById.get(m.resultId) : undefined)).filter(Boolean),
+        ),
+      ].sort((a, b) => (a as number) - (b as number));
+      alert(
+        `以下不合格項目尚未上傳「改善前照片」，請補拍後才能送出：\n\n第 ${nos.join('、')} 項\n\n（判定異常一定要拍照上傳，這是規定）`,
+      );
+      return;
+    }
+
     const warnings: string[] = [];
-    if (selectedInspectorIds.size === 0) warnings.push('• 尚未選擇檢查人員');
     if (missingVerdicts.length > 0)
       warnings.push(`• 有 ${missingVerdicts.length} 項未判定（第 ${missingVerdicts.map((x) => x.no).join('、')} 項）`);
     if (failWithoutDetail.length > 0)
       warnings.push(`• 有 ${failWithoutDetail.length} 項不合格未填缺失說明或權責單位（第 ${failWithoutDetail.join('、')} 項）`);
 
-    const next = status === 'completed' ? 'draft' : 'completed';
-
-    // 強制拍照（僅在「送出並標記完成」時）：判異常一定要有改善前照片，否則不可送出
-    if (next === 'completed') {
-      const missingPhotos = await listDefectsMissingBeforePhotoAction(inspection.id);
-      if (missingPhotos.length > 0) {
-        const nos = [
-          ...new Set(
-            missingPhotos.map((m) => (m.resultId ? displayNoById.get(m.resultId) : undefined)).filter(Boolean),
-          ),
-        ].sort((a, b) => (a as number) - (b as number));
-        alert(
-          `以下不合格項目尚未上傳「改善前照片」，請補拍後才能送出：\n\n第 ${nos.join('、')} 項\n\n（判定異常一定要拍照上傳，這是規定）`,
-        );
-        return;
-      }
-    }
-
-    if (warnings.length > 0) {
-      const ok = confirm(`以下項目尚未完成：\n\n${warnings.join('\n')}\n\n仍要送出並標記完成嗎？`);
-      if (!ok) return;
-    }
+    const confirmMsg =
+      warnings.length > 0
+        ? `以下項目尚未完成：\n\n${warnings.join('\n')}\n\n送出後即鎖定不可修改，仍要送出嗎？`
+        : '送出後此表單即鎖定、不可再修改。確定送出？';
+    if (!confirm(confirmMsg)) return;
 
     setSubmitting(true);
-    await setInspectionStatusAction(inspection.id, next);
-    setStatus(next);
+    const res = await submitInspectionAction(inspection.id);
     setSubmitting(false);
-    if (next === 'completed' && warnings.length === 0) alert('今日巡檢已標記完成 ✅');
-  }
-
-  async function handleToggleInspector(inspectorId: string) {
-    const checked = !selectedInspectorIds.has(inspectorId);
-    setSelectedInspectorIds((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(inspectorId);
-      else next.delete(inspectorId);
-      return next;
-    });
-    await toggleInspectorAction(inspection.id, inspectorId, checked);
-  }
-
-  async function handleAddInspector() {
-    const name = newInspectorName.trim();
-    if (!name) return;
-    setAddingInspector(false);
-    setNewInspectorName('');
-    const res = await createInspectorAction(name);
     if (res.ok) {
-      setInspectorList((prev) =>
-        prev.some((i) => i.id === res.inspector.id)
-          ? prev
-          : [...prev, { id: res.inspector.id, name: res.inspector.name, sortOrder: 99, isActive: true }],
-      );
-      await handleToggleInspector(res.inspector.id);
+      setStatus('completed');
+      alert('已送出並鎖定 ✅ 16:30 將彙整為當日報告');
+    } else {
+      alert('送出失敗，請重試');
     }
   }
 
   return (
     <div className="space-y-5 pb-6">
       <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <div className="mb-2">
+          <Link href="/inspection" className="text-sm font-medium" style={{ color: 'var(--brand)' }}>
+            ← 今日表單清單
+          </Link>
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-bold text-foreground">
@@ -263,89 +231,27 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
               {inspection.area} · {inspection.formCode}
             </div>
           </div>
-          <div className="rounded-full bg-brand-tint px-3 py-1 text-xs font-semibold" style={{ color: 'var(--brand)' }}>
-            自動儲存
+          <div
+            className="rounded-full px-3 py-1 text-xs font-semibold"
+            style={
+              readOnly
+                ? { background: 'var(--pass)', color: 'white' }
+                : { background: 'var(--brand-tint)', color: 'var(--brand)' }
+            }
+          >
+            {readOnly ? '已送出鎖定' : '自動儲存'}
           </div>
         </div>
-
-        <div className="mt-3">
-          <div className="mb-1.5 flex items-center justify-between text-sm">
-            <span className="font-medium text-foreground">檢查人員</span>
-            <span className="text-muted">
-              已完成 {doneCount}/{results.length} 項
+        <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-sm">
+          <span className="font-medium text-foreground">
+            填表人：
+            <span className="font-bold" style={{ color: 'var(--brand)' }}>
+              {inspection.filledByName ?? '（未填名）'}
             </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {inspectorList.map((ins) => {
-              const active = selectedInspectorIds.has(ins.id);
-              return (
-                <button
-                  key={ins.id}
-                  onClick={() => handleToggleInspector(ins.id)}
-                  className="rounded-full border px-3.5 py-1.5 text-sm font-medium transition active:scale-95"
-                  style={
-                    active
-                      ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
-                      : { borderColor: 'var(--border)', color: 'var(--foreground)' }
-                  }
-                >
-                  {ins.name}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setAddingInspector((v) => !v)}
-              className="rounded-full border border-dashed px-3.5 py-1.5 text-sm font-medium text-muted transition active:scale-95"
-              style={{ borderColor: 'var(--border)' }}
-            >
-              ＋ 其他
-            </button>
-          </div>
-          {addingInspector && (
-            <div className="mt-2 flex gap-2">
-              <input
-                type="text"
-                value={newInspectorName}
-                onChange={(e) => setNewInspectorName(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddInspector()}
-                placeholder="輸入姓名"
-                autoFocus
-                className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-              />
-              <button
-                onClick={handleAddInspector}
-                className="rounded-lg px-4 py-2 text-sm font-semibold text-white active:scale-95"
-                style={{ background: 'var(--brand)' }}
-              >
-                加入
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-3 border-t border-border pt-3">
-          <div className="mb-1.5 text-sm font-medium text-foreground">
-            目前操作人員 <span className="text-xs font-normal text-muted">（記錄是誰開立缺失，可不選）</span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {inspectorList.map((ins) => {
-              const active = operator === ins.name;
-              return (
-                <button
-                  key={ins.id}
-                  onClick={() => chooseOperator(ins.name)}
-                  className="rounded-full border px-3.5 py-1.5 text-sm font-medium transition active:scale-95"
-                  style={
-                    active
-                      ? { background: 'var(--recheck)', borderColor: 'var(--recheck)', color: 'white' }
-                      : { borderColor: 'var(--border)', color: 'var(--foreground)' }
-                  }
-                >
-                  {ins.name}
-                </button>
-              );
-            })}
-          </div>
+          </span>
+          <span className="text-muted">
+            已完成 {doneCount}/{results.length} 項
+          </span>
         </div>
       </div>
 
@@ -367,6 +273,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
                 pending={pendingDefectIds.has(item.id)}
                 units={units}
                 unitAreas={unitAreas}
+                readOnly={readOnly}
                 saving={savingIds.has(item.id)}
                 onVerdict={(v) => handleVerdict(item.id, v)}
                 onAddDefect={() => handleAddDefect(item.id)}
@@ -382,18 +289,23 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
       ))}
 
       <div className="space-y-2.5 pt-2">
-        <button
-          onClick={handleSubmit}
-          disabled={submitting}
-          className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
-          style={{ background: status === 'completed' ? 'var(--pass)' : 'var(--brand)' }}
-        >
-          {submitting
-            ? '處理中…'
-            : status === 'completed'
-              ? '✓ 已送出今日紀錄（點此改回編輯）'
-              : '送出今日紀錄'}
-        </button>
+        {readOnly ? (
+          <div
+            className="w-full rounded-2xl py-4 text-center text-base font-bold text-white shadow-sm"
+            style={{ background: 'var(--pass)' }}
+          >
+            ✓ 已送出鎖定（16:30 彙整為當日報告）
+          </div>
+        ) : (
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
+            style={{ background: 'var(--brand)' }}
+          >
+            {submitting ? '處理中…' : '送出此表單（送出後鎖定）'}
+          </button>
+        )}
         <a
           href={`/api/inspections/${inspection.id}/pdf`}
           target="_blank"
@@ -404,7 +316,7 @@ export function InspectionClient({ inspection, initialResults, inspectors, units
           產生 / 檢視 PDF 報表
         </a>
         <p className="text-center text-xs text-muted">
-          已完成 {doneCount}/{results.length} 項 · 送出時會檢查漏填
+          已完成 {doneCount}/{results.length} 項{!readOnly && ' · 送出時會檢查漏填與缺照片'}
         </p>
       </div>
     </div>
@@ -437,6 +349,7 @@ function ItemCard({
   pending,
   units,
   unitAreas,
+  readOnly = false,
   saving,
   onVerdict,
   onAddDefect,
@@ -452,6 +365,7 @@ function ItemCard({
   pending?: boolean;
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
+  readOnly?: boolean;
   saving: boolean;
   onVerdict: (v: ItemVerdict) => void;
   onAddDefect: () => void;
@@ -486,11 +400,12 @@ function ItemCard({
             <button
               key={opt.value}
               onClick={() => onVerdict(opt.value)}
-              className="rounded-xl border-2 py-3 text-base font-semibold transition active:scale-[0.97]"
+              disabled={readOnly}
+              className="rounded-xl border-2 py-3 text-base font-semibold transition active:scale-[0.97] disabled:active:scale-100"
               style={
                 active
                   ? { background: opt.color, borderColor: opt.color, color: 'white' }
-                  : { borderColor: 'var(--border)', color: opt.color, background: 'white' }
+                  : { borderColor: 'var(--border)', color: opt.color, background: 'white', opacity: readOnly ? 0.4 : 1 }
               }
             >
               {opt.label}
@@ -499,7 +414,27 @@ function ItemCard({
         })}
       </div>
 
-      {showDefects && (
+      {showDefects && readOnly && (
+        <div className="mt-3 space-y-2">
+          {defects.map((defect, i) => (
+            <div key={defect.id} className="rounded-xl border border-fail/30 bg-fail/5 p-3 text-sm">
+              <div className="mb-1 text-xs font-bold" style={{ color: 'var(--fail)' }}>
+                缺失 #{i + 1}
+              </div>
+              {defect.description && <div className="text-foreground">{defect.description}</div>}
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                {defect.unitIds.length > 0 && (
+                  <span>單位：{units.filter((u) => defect.unitIds.includes(u.id)).map((u) => u.name).join('、')}</span>
+                )}
+                {defect.areaName && <span>區域：{defect.areaName}</span>}
+                <span>期限：{defect.dueDate}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showDefects && !readOnly && (
         <>
           {defects.map((defect, i) => (
             <DefectForm
@@ -536,6 +471,7 @@ function ItemCard({
             <div className="flex overflow-hidden rounded-lg border border-border">
               <button
                 onClick={() => onTempFacility(false)}
+                disabled={readOnly}
                 className="px-3 py-1 text-xs font-semibold"
                 style={
                   item.tempFacilityPresent === false
@@ -547,6 +483,7 @@ function ItemCard({
               </button>
               <button
                 onClick={() => onTempFacility(true)}
+                disabled={readOnly}
                 className="px-3 py-1 text-xs font-semibold"
                 style={
                   item.tempFacilityPresent === true
@@ -563,6 +500,7 @@ function ItemCard({
               type="text"
               placeholder="請說明暫時性設施內容"
               defaultValue={item.tempFacilityDesc ?? ''}
+              disabled={readOnly}
               onChange={(e) => onTempFacilityDesc(e.target.value)}
               onBlur={onCommitTempFacilityDesc}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand"

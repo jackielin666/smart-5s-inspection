@@ -2,33 +2,44 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import type { HistoryRow } from '@/application/services/history.service';
+import type { HistoryDayRow } from '@/application/services/history.service';
 import { formatFriendlyDate } from '@/domain/date';
 
-export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
+function hhmm(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('zh-TW', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: 'Asia/Taipei',
+  });
+}
+
+/** 歷史巡檢：一列一天；點開列出當日各表單（結算後唯讀） */
+export function HistoryClient({ days }: { days: HistoryDayRow[] }) {
   const [keyword, setKeyword] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [openDate, setOpenDate] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (from && r.inspectionDate < from) return false;
-      if (to && r.inspectionDate > to) return false;
+    return days.filter((d) => {
+      if (from && d.date < from) return false;
+      if (to && d.date > to) return false;
       if (keyword.trim()) {
         const k = keyword.trim();
-        if (!r.inspectionDate.includes(k) && !r.area.includes(k) && !r.inspectorNames.some((n) => n.includes(k)))
-          return false;
+        if (!d.date.includes(k) && !d.fillerNames.some((n) => n.includes(k))) return false;
       }
       return true;
     });
-  }, [rows, keyword, from, to]);
+  }, [days, keyword, from, to]);
 
   return (
     <div className="space-y-4 pb-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-foreground">歷史巡檢</h1>
         <span className="rounded-full bg-brand-tint px-2.5 py-1 text-xs font-semibold" style={{ color: 'var(--brand)' }}>
-          {filtered.length} 筆
+          {filtered.length} 天
         </span>
       </div>
 
@@ -36,7 +47,7 @@ export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
         type="search"
         value={keyword}
         onChange={(e) => setKeyword(e.target.value)}
-        placeholder="搜尋：日期 / 區域 / 巡檢人員"
+        placeholder="搜尋：日期 / 填表人"
         className="w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-brand"
       />
       <div className="flex items-center gap-2 text-sm">
@@ -49,30 +60,69 @@ export function HistoryClient({ rows }: { rows: HistoryRow[] }) {
         <div className="py-16 text-center text-sm text-muted">尚無巡檢紀錄</div>
       ) : (
         <div className="space-y-2.5">
-          {filtered.map((r) => (
-            <Link
-              key={r.id}
-              href={`/inspection?id=${r.id}`}
-              className="block rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-bold text-foreground">{formatFriendlyDate(r.inspectionDate)}</div>
-                <span
-                  className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
-                  style={{ background: r.status === 'completed' ? 'var(--pass)' : 'var(--muted)' }}
+          {filtered.map((d) => {
+            const opened = openDate === d.date;
+            const allSubmitted = d.forms.every((f) => f.status === 'completed');
+            return (
+              <div key={d.date} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                <button
+                  onClick={() => setOpenDate(opened ? null : d.date)}
+                  className="block w-full p-4 text-left active:scale-[0.99]"
                 >
-                  {r.status === 'completed' ? '已完成' : '草稿'}
-                </span>
+                  <div className="flex items-center justify-between">
+                    <div className="font-bold text-foreground">{formatFriendlyDate(d.date)}</div>
+                    <span
+                      className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+                      style={{ background: allSubmitted ? 'var(--pass)' : 'var(--pending)' }}
+                    >
+                      {allSubmitted ? '已完成' : '有未送出表單'}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
+                    <span>表單 {d.forms.length} 張</span>
+                    {d.fillerNames.length > 0 && <span>人員：{d.fillerNames.join('、')}</span>}
+                    <span>
+                      缺失 {d.defectCount}（未改善 {d.openCount}）
+                    </span>
+                  </div>
+                </button>
+
+                {opened && (
+                  <div className="space-y-2 border-t border-border bg-background/50 p-3">
+                    {d.forms.map((f) => (
+                      <Link
+                        key={f.id}
+                        href={`/inspection?id=${f.id}`}
+                        className="block rounded-xl border border-border bg-white p-3 active:scale-[0.99]"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-bold text-foreground">{f.filledByName ?? '（未填名）'}</span>
+                          <span
+                            className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+                            style={{ background: f.status === 'completed' ? 'var(--pass)' : 'var(--pending)' }}
+                          >
+                            {f.status === 'completed' ? '已送出' : '未送出'}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-muted">
+                          <span>開表 {hhmm(f.createdAt)}</span>
+                          {f.submittedAt && <span>送出 {hhmm(f.submittedAt)}</span>}
+                          <span>
+                            完成 {f.done}/{f.total}
+                          </span>
+                          <span>缺失 {f.defectCount}</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">
-                <span>{r.area}</span>
-                {r.inspectorNames.length > 0 && <span>人員：{r.inspectorNames.join('、')}</span>}
-                <span>缺失 {r.defectCount}（未改善 {r.openCount}）</span>
-              </div>
-            </Link>
-          ))}
+            );
+          })}
         </div>
       )}
+
+      <p className="text-center text-xs text-muted">已送出表單為唯讀 · 16:30 結算後產生當日報告</p>
     </div>
   );
 }

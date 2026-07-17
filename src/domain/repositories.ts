@@ -29,10 +29,13 @@ export interface MasterDataRepository {
 }
 
 export interface InspectionRepository {
-  findByDate(date: string, area?: string): Promise<Inspection | null>;
+  /** 當日所有表單（多表單模型：一天可多張，各自填表人） */
+  listByDate(date: string, area?: string): Promise<Inspection[]>;
   findById(id: string): Promise<Inspection | null>;
-  /** 建立當日巡檢（同時以項目快照建立全部 inspection_results） */
-  create(date: string, area: string, inspectorIds: string[], createdBy: string): Promise<Inspection>;
+  /** 建立一張新表單（同時以項目快照建立全部 inspection_results） */
+  create(date: string, area: string, filledByName: string, createdBy: string): Promise<Inspection>;
+  /** 送出表單：completed + submitted_at，之後鎖定唯讀 */
+  submit(id: string): Promise<void>;
   update(id: string, patch: Partial<Inspection>): Promise<void>;
   softDelete(id: string, deletedBy: string): Promise<void>;
   getResults(inspectionId: string): Promise<InspectionResult[]>;

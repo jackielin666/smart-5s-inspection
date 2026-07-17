@@ -50,17 +50,20 @@ async function computeDueDate(
   return d.toISOString().slice(0, 10);
 }
 
-async function createDefect(inspectionId: string, resultId: string, openedByName?: string): Promise<Defect> {
+async function createDefect(inspectionId: string, resultId: string): Promise<Defect> {
   const { supabase, repo, userId } = await ctx();
   const today = taipeiToday();
-  const [dueDate, { count }] = await Promise.all([
+  const [dueDate, { count }, { data: insp }] = await Promise.all([
     computeDueDate(supabase, today),
     supabase
       .from('defects')
       .select('id', { count: 'exact', head: true })
       .eq('inspection_id', inspectionId)
       .is('deleted_at', null),
+    // 開立人＝該表單填表人（一表一人，開表時已必選）
+    supabase.from('inspections').select('filled_by_name').eq('id', inspectionId).maybeSingle(),
   ]);
+  const openedByName = (insp?.filled_by_name as string | null) ?? null;
   return repo.create({
     inspectionId,
     resultId,
@@ -74,7 +77,7 @@ async function createDefect(inspectionId: string, resultId: string, openedByName
     resolvedAt: null,
     resolvedConfirmedBy: null,
     resolutionNote: null,
-    openedByName: openedByName || null,
+    openedByName,
     resolvedByName: null,
     qaOwner: userId || null,
   });
@@ -84,7 +87,6 @@ async function createDefect(inspectionId: string, resultId: string, openedByName
 export async function ensureDefectsForResult(
   inspectionId: string,
   resultId: string,
-  openedByName?: string,
 ): Promise<{ ok: true; defects: Defect[] } | { ok: false }> {
   try {
     const { supabase, repo } = await ctx();
@@ -100,7 +102,7 @@ export async function ensureDefectsForResult(
       // 改回合格又改回不合格 → 全部還原，保留文字與照片
       await supabase.from('defects').update({ deleted_at: null }).in('id', trashedIds);
     } else if (activeIds.length === 0) {
-      await createDefect(inspectionId, resultId, openedByName);
+      await createDefect(inspectionId, resultId);
     }
 
     const { data: full } = await supabase
@@ -124,10 +126,9 @@ export async function ensureDefectsForResult(
 export async function addDefectForResult(
   inspectionId: string,
   resultId: string,
-  openedByName?: string,
 ): Promise<{ ok: true; defect: Defect } | { ok: false }> {
   try {
-    const defect = await createDefect(inspectionId, resultId, openedByName);
+    const defect = await createDefect(inspectionId, resultId);
     return { ok: true, defect };
   } catch {
     return { ok: false };

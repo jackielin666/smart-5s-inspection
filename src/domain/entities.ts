@@ -53,6 +53,8 @@ export interface Inspection {
   area: string;
   formCode: string;
   status: 'draft' | 'completed';
+  filledByName: string | null; // 填表人（開表時必選，一表一人）
+  submittedAt: string | null;  // 送出時間（送出即鎖定）
   inspectorIds: string[];
   plantManagerSignedAt: string | null;
   hygieneManagerSignedAt: string | null;

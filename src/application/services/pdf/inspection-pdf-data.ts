@@ -90,8 +90,25 @@ export async function buildInspectionPdfData(
     else sections.push({ name: row.section, items: [row] });
   }
 
-  // 本日缺失 + 未結案舊缺失（狀況說明往前帶，比照紙本第2頁）
+  // 檢查人員＝當日所有表單的填表人聯集（多表單模型）＋舊制勾選的檢查人員
   const inspDate = insp.inspection_date as string;
+  const { data: dayForms } = await db
+    .from('inspections')
+    .select('filled_by_name')
+    .eq('inspection_date', inspDate)
+    .eq('area', insp.area)
+    .is('deleted_at', null);
+  const inspectorNames: string[] = [];
+  for (const f of dayForms ?? []) {
+    const n = f.filled_by_name as string | null;
+    if (n && !inspectorNames.includes(n)) inspectorNames.push(n);
+  }
+  for (const ii of insp.inspection_inspectors ?? []) {
+    const n = ii.inspectors?.name as string | undefined;
+    if (n && !inspectorNames.includes(n)) inspectorNames.push(n);
+  }
+
+  // 本日缺失 + 未結案舊缺失（狀況說明往前帶，比照紙本第2頁）
   const { data: todays } = await db
     .from('defects')
     .select('*, defect_units(responsible_units(name)), inspections(inspection_date), defect_photos(kind, storage_key, sort_order, deleted_at)')
@@ -141,7 +158,7 @@ export async function buildInspectionPdfData(
     rocDate: toRocDate(inspDate),
     area: insp.area ?? '全廠每日',
     legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
-    inspectors: (insp.inspection_inspectors ?? []).map((ii: Row) => ii.inspectors?.name).filter(Boolean),
+    inspectors: inspectorNames,
     sections,
     notesByDate,
     improvements: [...todayDefects, ...olderDefects]

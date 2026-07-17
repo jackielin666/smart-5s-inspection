@@ -2,6 +2,7 @@
 
 import { createClient } from '@/infrastructure/supabase/server';
 import { SupabaseInspectionRepository } from '@/infrastructure/repositories/supabase-inspection.repository';
+import { createTodayForm } from '@/application/services/today-inspection.service';
 import type { ItemVerdict } from '@/domain/entities';
 
 type ActionResult = { ok: true } | { ok: false };
@@ -33,24 +34,23 @@ export async function setTempFacilityAction(
   return { ok: !error };
 }
 
-export async function toggleInspectorAction(
-  inspectionId: string,
-  inspectorId: string,
-  checked: boolean,
-): Promise<ActionResult> {
-  const supabase = await createClient();
-  if (checked) {
-    const { error } = await supabase
-      .from('inspection_inspectors')
-      .insert({ inspection_id: inspectionId, inspector_id: inspectorId });
-    return { ok: !error };
+/** 開一張今日新表單（填表人必填，一表一人） */
+export async function createTodayFormAction(
+  filledByName: string,
+): Promise<{ ok: true; id: string } | { ok: false }> {
+  try {
+    const name = filledByName.trim();
+    if (!name) return { ok: false };
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const repo = new SupabaseInspectionRepository(supabase);
+    const form = await createTodayForm(repo, name, user?.id ?? '');
+    return { ok: true, id: form.id };
+  } catch {
+    return { ok: false };
   }
-  const { error } = await supabase
-    .from('inspection_inspectors')
-    .delete()
-    .eq('inspection_id', inspectionId)
-    .eq('inspector_id', inspectorId);
-  return { ok: !error };
 }
 
 export async function createInspectorAction(
@@ -82,11 +82,14 @@ export async function createInspectorAction(
   }
 }
 
-export async function setInspectionStatusAction(
-  inspectionId: string,
-  status: 'draft' | 'completed',
-): Promise<{ ok: boolean }> {
-  const supabase = await createClient();
-  const { error } = await supabase.from('inspections').update({ status }).eq('id', inspectionId);
-  return { ok: !error };
+/** 送出表單：completed + submitted_at，之後鎖定唯讀（不可改回） */
+export async function submitInspectionAction(inspectionId: string): Promise<{ ok: boolean }> {
+  try {
+    const supabase = await createClient();
+    const repo = new SupabaseInspectionRepository(supabase);
+    await repo.submit(inspectionId);
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
 }

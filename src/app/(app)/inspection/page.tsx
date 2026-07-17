@@ -2,8 +2,10 @@ import { createClient } from '@/infrastructure/supabase/server';
 import { SupabaseInspectionRepository } from '@/infrastructure/repositories/supabase-inspection.repository';
 import { SupabaseMasterDataRepository } from '@/infrastructure/repositories/supabase-master-data.repository';
 import { SupabaseDefectRepository } from '@/infrastructure/repositories/supabase-defect.repository';
-import { getOrCreateTodayInspection } from '@/application/services/today-inspection.service';
+import { listTodayForms } from '@/application/services/today-inspection.service';
+import { taipeiToday } from '@/domain/date';
 import { InspectionClient } from './_components/inspection-client';
+import { TodayFormsClient } from './_components/today-forms';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,46 +16,67 @@ export default async function InspectionPage({
 }) {
   const { id } = await searchParams;
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
   const inspectionRepo = new SupabaseInspectionRepository(supabase);
   const masterDataRepo = new SupabaseMasterDataRepository(supabase);
   const defectRepo = new SupabaseDefectRepository(supabase);
 
-  const [inspectors, units, unitAreas] = await Promise.all([
-    masterDataRepo.getInspectors(),
-    masterDataRepo.getUnits(),
-    masterDataRepo.getUnitAreas(),
-  ]);
-
-  // id 存在 → 重開指定日期的巡檢；否則今日巡檢（不存在則建立）
-  let inspection;
-  let results;
+  // 指定 id → 開啟該張表單（進行中可編輯；已送出唯讀）
   if (id) {
-    const found = await inspectionRepo.findById(id);
-    if (found) {
-      inspection = found;
-      results = await inspectionRepo.getResults(id);
+    const inspection = await inspectionRepo.findById(id);
+    if (inspection) {
+      const [results, defects, units, unitAreas] = await Promise.all([
+        inspectionRepo.getResults(id),
+        defectRepo.listByInspection(id),
+        masterDataRepo.getUnits(),
+        masterDataRepo.getUnitAreas(),
+      ]);
+      return (
+        <InspectionClient
+          inspection={inspection}
+          initialResults={results}
+          units={units}
+          unitAreas={unitAreas}
+          initialDefects={defects}
+        />
+      );
     }
   }
-  if (!inspection || !results) {
-    const today = await getOrCreateTodayInspection(inspectionRepo, user?.id ?? '');
-    inspection = today.inspection;
-    results = today.results;
+
+  // 無 id → 今日表單清單 + 開新表單
+  const [forms, inspectors] = await Promise.all([
+    listTodayForms(inspectionRepo),
+    masterDataRepo.getInspectors(),
+  ]);
+
+  // 各表單完成度（一次查回今日所有結果，本地彙總）
+  const doneByForm = new Map<string, { done: number; total: number }>();
+  if (forms.length > 0) {
+    const { data: rows } = await supabase
+      .from('inspection_results')
+      .select('inspection_id, verdict')
+      .in('inspection_id', forms.map((f) => f.id));
+    for (const r of rows ?? []) {
+      const agg = doneByForm.get(r.inspection_id) ?? { done: 0, total: 0 };
+      agg.total += 1;
+      if (r.verdict) agg.done += 1;
+      doneByForm.set(r.inspection_id, agg);
+    }
   }
 
-  const defects = await defectRepo.listByInspection(inspection.id);
-
   return (
-    <InspectionClient
-      inspection={inspection}
-      initialResults={results}
+    <TodayFormsClient
+      date={taipeiToday()}
+      forms={forms.map((f) => ({
+        id: f.id,
+        filledByName: f.filledByName,
+        status: f.status,
+        createdAt: f.createdAt,
+        submittedAt: f.submittedAt,
+        done: doneByForm.get(f.id)?.done ?? 0,
+        total: doneByForm.get(f.id)?.total ?? 0,
+      }))}
       inspectors={inspectors}
-      units={units}
-      unitAreas={unitAreas}
-      initialDefects={defects}
     />
   );
 }

@@ -6,6 +6,6 @@ export const dynamic = 'force-dynamic';
 
 export default async function HistoryPage() {
   const supabase = await createClient();
-  const rows = await listInspectionHistory(supabase);
-  return <HistoryClient rows={rows} />;
+  const days = await listInspectionHistory(supabase);
+  return <HistoryClient days={days} />;
 }

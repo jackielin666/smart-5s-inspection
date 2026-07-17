@@ -41,18 +41,6 @@ export function IssueCard({
   const [afterCount, setAfterCount] = useState(afterPhotos.length);
   const [submitted, setSubmitted] = useState(false); // 送出後鎖定按鈕
 
-  // 展開時預帶目前操作人員（今日巡檢所選）作為確認人員預設
-  useEffect(() => {
-    if (open && !confirmedBy) {
-      try {
-        const op = localStorage.getItem('wuhui_operator');
-        if (op) setConfirmedBy(op);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [open, confirmedBy]);
-
   async function saveDueDate(v: string) {
     setDueDate(v);
     setSaving(true);
@@ -66,6 +54,11 @@ export function IssueCard({
     // 凡走過必留痕跡：任何狀態送出都要選確認人員
     if (!confirmedBy.trim()) {
       alert('請先選擇確認人員');
+      return;
+    }
+    // 結案必有改善前照片（補拍入口在今日巡檢），確保報告能前後對照
+    if (pendingStatus === 'resolved' && beforePhotos.length === 0) {
+      alert('此缺失沒有「改善前照片」，請先至今日巡檢該項目補拍，才能結案');
       return;
     }
     // 結案必拍改善後照片
