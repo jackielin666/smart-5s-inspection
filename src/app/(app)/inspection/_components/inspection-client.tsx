@@ -9,10 +9,11 @@ import {
   addDefectForResult,
   deleteDefectAction,
   ensureDefectsForResult,
-  listDefectsMissingBeforePhotoAction,
   removeDefectForResult,
+  validateDefectsForSubmitAction,
 } from '../defect-actions';
 import { DefectForm } from './defect-form';
+import { AppDialog, type DialogState } from '../../_components/app-dialog';
 
 const VERDICT_OPTIONS: { value: ItemVerdict; label: string; color: string }[] = [
   { value: 'pass', label: '合格', color: 'var(--pass)' },
@@ -44,6 +45,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState(inspection.status);
   const [submitting, setSubmitting] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   const readOnly = status === 'completed'; // 送出後鎖定唯讀
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
   const latestVerdictRef = useRef(new Map<string, ItemVerdict | null>());
@@ -151,67 +153,79 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
     markSaving(resultId, false);
   }
 
-  async function handleDeleteDefect(resultId: string, defectId: string) {
-    if (!confirm('確定刪除此筆缺失？（照片與文字將一併移除）')) return;
-    setDefectsByResult((prev) => ({
-      ...prev,
-      [resultId]: (prev[resultId] ?? []).filter((d) => d.id !== defectId),
-    }));
-    markSaving(resultId, true);
-    await deleteDefectAction(defectId);
-    markSaving(resultId, false);
+  function handleDeleteDefect(resultId: string, defectId: string) {
+    setDialog({
+      title: '提醒：刪除缺失',
+      mode: 'confirm',
+      okLabel: '確定刪除',
+      lines: ['確定刪除此筆缺失？', '照片與文字將一併移除。'],
+      onOk: async () => {
+        setDefectsByResult((prev) => ({
+          ...prev,
+          [resultId]: (prev[resultId] ?? []).filter((d) => d.id !== defectId),
+        }));
+        markSaving(resultId, true);
+        await deleteDefectAction(defectId);
+        markSaving(resultId, false);
+      },
+    });
   }
 
   async function handleSubmit() {
     if (readOnly || submitting) return;
-    // 漏填檢查（送出時才提醒，不打斷巡檢過程）
-    const missingVerdicts = results
-      .map((r, i) => ({ no: i + 1, r }))
-      .filter((x) => !x.r.verdict);
-    const failWithoutDetail: number[] = [];
-    results.forEach((r, i) => {
-      if (r.verdict && NEEDS_DEFECT.includes(r.verdict)) {
-        const ds = defectsByResult[r.id] ?? [];
-        const incomplete = ds.length === 0 || ds.some((d) => !d.description.trim() || d.unitIds.length === 0);
-        if (incomplete) failWithoutDetail.push(i + 1);
-      }
-    });
+    setSubmitting(true);
 
-    // 強制拍照：判異常一定要有改善前照片，否則不可送出（硬性擋下）
-    const missingPhotos = await listDefectsMissingBeforePhotoAction(inspection.id);
-    if (missingPhotos.length > 0) {
-      const nos = [
-        ...new Set(
-          missingPhotos.map((m) => (m.resultId ? displayNoById.get(m.resultId) : undefined)).filter(Boolean),
-        ),
-      ].sort((a, b) => (a as number) - (b as number));
-      alert(
-        `以下不合格項目尚未上傳「改善前照片」，請補拍後才能送出：\n\n第 ${nos.join('、')} 項\n\n（判定異常一定要拍照上傳，這是規定）`,
-      );
+    // 1) 未判定項目（畫面狀態即最新）
+    const missingVerdictNos = results
+      .map((r, i) => ({ no: i + 1, verdict: r.verdict }))
+      .filter((x) => !x.verdict)
+      .map((x) => x.no);
+
+    // 2) 缺失完整性：以資料庫最新資料驗證（說明/權責單位/改善前照片），避免畫面快取誤判
+    const issues = await validateDefectsForSubmitAction(inspection.id);
+    setSubmitting(false);
+
+    const toNos = (pick: (i: (typeof issues)[number]) => boolean) =>
+      [...new Set(issues.filter(pick).map((i) => (i.resultId ? displayNoById.get(i.resultId) : undefined)).filter(Boolean))]
+        .sort((a, b) => (a as number) - (b as number))
+        .join('、');
+
+    const lines: string[] = [];
+    if (missingVerdictNos.length > 0) lines.push(`・尚未判定：第 ${missingVerdictNos.join('、')} 項`);
+    const descNos = toNos((i) => i.noDesc);
+    if (descNos) lines.push(`・缺失說明未填：第 ${descNos} 項`);
+    const unitNos = toNos((i) => i.noUnit);
+    if (unitNos) lines.push(`・權責單位未選：第 ${unitNos} 項`);
+    const photoNos = toNos((i) => i.noPhoto);
+    if (photoNos) lines.push(`・改善前照片未拍：第 ${photoNos} 項`);
+
+    // 有任何未完成 → 擋下不能送出（全部完成才能有效送出）
+    if (lines.length > 0) {
+      setDialog({
+        title: '提醒：尚未完成，無法送出',
+        mode: 'alert',
+        lines: [...lines, '請完成上述項目後再送出此表單。'],
+      });
       return;
     }
 
-    const warnings: string[] = [];
-    if (missingVerdicts.length > 0)
-      warnings.push(`• 有 ${missingVerdicts.length} 項未判定（第 ${missingVerdicts.map((x) => x.no).join('、')} 項）`);
-    if (failWithoutDetail.length > 0)
-      warnings.push(`• 有 ${failWithoutDetail.length} 項不合格未填缺失說明或權責單位（第 ${failWithoutDetail.join('、')} 項）`);
-
-    const confirmMsg =
-      warnings.length > 0
-        ? `以下項目尚未完成：\n\n${warnings.join('\n')}\n\n送出後即鎖定不可修改，仍要送出嗎？`
-        : '送出後此表單即鎖定、不可再修改。確定送出？';
-    if (!confirm(confirmMsg)) return;
-
-    setSubmitting(true);
-    const res = await submitInspectionAction(inspection.id);
-    setSubmitting(false);
-    if (res.ok) {
-      setStatus('completed');
-      alert('已送出並鎖定 ✅ 16:30 將彙整為當日報告');
-    } else {
-      alert('送出失敗，請重試');
-    }
+    setDialog({
+      title: '提醒：確認送出',
+      mode: 'confirm',
+      okLabel: '確定送出',
+      lines: ['檢查項目已全部完成。', '送出後此表單即鎖定、不可再修改。'],
+      onOk: async () => {
+        setSubmitting(true);
+        const res = await submitInspectionAction(inspection.id);
+        setSubmitting(false);
+        if (res.ok) {
+          setStatus('completed');
+          setDialog({ title: '提醒', mode: 'alert', lines: ['已送出並鎖定 ✅', '16:30 將彙整為當日報告。'] });
+        } else {
+          setDialog({ title: '提醒', mode: 'alert', lines: ['送出失敗，請重試。'] });
+        }
+      },
+    });
   }
 
   return (
@@ -306,19 +320,29 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
             {submitting ? '處理中…' : '送出此表單（送出後鎖定）'}
           </button>
         )}
-        <a
-          href={`/api/reports/${inspection.inspectionDate}/pdf`}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={() => {
+            if (!readOnly) {
+              setDialog({
+                title: '提醒',
+                mode: 'alert',
+                lines: ['此表單尚未送出。', '請先「送出此表單」，再檢視當日報告 PDF。'],
+              });
+              return;
+            }
+            window.open(`/api/reports/${inspection.inspectionDate}/pdf`, '_blank', 'noopener,noreferrer');
+          }}
           className="block w-full rounded-2xl border-2 py-3.5 text-center text-base font-bold transition active:scale-[0.99]"
           style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
         >
           檢視當日報告 PDF（彙整所有表單）
-        </a>
+        </button>
         <p className="text-center text-xs text-muted">
-          已完成 {doneCount}/{results.length} 項{!readOnly && ' · 送出時會檢查漏填與缺照片'}
+          已完成 {doneCount}/{results.length} 項{!readOnly && ' · 全部完成才能送出'}
         </p>
       </div>
+
+      <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
 

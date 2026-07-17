@@ -77,6 +77,9 @@ function makeMapDefect(fallbackDate: string) {
 const DEFECT_SELECT =
   '*, defect_units(responsible_units(name)), inspections(inspection_date), defect_photos(kind, storage_key, sort_order, deleted_at)';
 
+/** 有效缺失：有說明或有照片才列入報告（空白測試缺失不編號、不佔版面） */
+const isMeaningful = (d: PdfDefect) => d.description.trim() !== '' || d.photos.length > 0;
+
 /** 依日期分組（新→舊），供第2頁狀況說明 */
 function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefect[] }[] {
   const byDate = new Map<string, PdfDefect[]>();
@@ -166,10 +169,11 @@ export async function buildInspectionPdfData(
     .lt('inspections.inspection_date', inspDate);
 
   const mapDefect = makeMapDefect(inspDate);
-  const todayDefects = (todays ?? []).map(mapDefect);
+  const todayDefects = (todays ?? []).map(mapDefect).filter(isMeaningful);
   const olderDefects = (olderOpen ?? [])
     .filter((d: Row) => d.inspections?.inspection_date) // 關聯過濾
-    .map(mapDefect);
+    .map(mapDefect)
+    .filter(isMeaningful);
   const all = [...todayDefects, ...olderDefects];
 
   return {
@@ -254,10 +258,11 @@ export async function buildDailyPdfData(
       .lt('inspections.inspection_date', date),
   ]);
   const mapDefect = makeMapDefect(date);
-  const todayDefects = (todays ?? []).map(mapDefect);
+  const todayDefects = (todays ?? []).map(mapDefect).filter(isMeaningful);
   const olderDefects = (olderOpen ?? [])
     .filter((d: Row) => d.inspections?.inspection_date)
-    .map(mapDefect);
+    .map(mapDefect)
+    .filter(isMeaningful);
   const all = [...todayDefects, ...olderDefects];
 
   const inspectors: string[] = [];

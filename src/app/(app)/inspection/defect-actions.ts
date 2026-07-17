@@ -135,25 +135,32 @@ export async function addDefectForResult(
   }
 }
 
-/** 送出前檢查：回傳「尚未上傳改善前照片」的缺失（依 result_id 標示是哪一項） */
-export async function listDefectsMissingBeforePhotoAction(
+/**
+ * 送出前完整驗證（以資料庫最新資料為準，避免畫面快取誤判）：
+ * 回傳每筆缺失缺了什麼（說明/權責單位/改善前照片）
+ */
+export async function validateDefectsForSubmitAction(
   inspectionId: string,
-): Promise<{ resultId: string | null; seqInDay: number }[]> {
+): Promise<{ resultId: string | null; noDesc: boolean; noUnit: boolean; noPhoto: boolean }[]> {
   try {
     const { supabase } = await ctx();
     const { data } = await supabase
       .from('defects')
-      .select('result_id, seq_in_day, defect_photos(kind, deleted_at)')
+      .select('result_id, description, defect_units(unit_id), defect_photos(kind, deleted_at)')
       .eq('inspection_id', inspectionId)
       .is('deleted_at', null);
-    return (data ?? [])
-      .filter(
-        (d) =>
-          !((d.defect_photos ?? []) as { kind: string; deleted_at: string | null }[]).some(
-            (p) => p.kind === 'before' && !p.deleted_at,
-          ),
-      )
-      .map((d) => ({ resultId: d.result_id as string | null, seqInDay: d.seq_in_day as number }));
+    const issues: { resultId: string | null; noDesc: boolean; noUnit: boolean; noPhoto: boolean }[] = [];
+    for (const d of data ?? []) {
+      const noDesc = !((d.description as string | null) ?? '').trim();
+      const noUnit = ((d.defect_units ?? []) as unknown[]).length === 0;
+      const noPhoto = !((d.defect_photos ?? []) as { kind: string; deleted_at: string | null }[]).some(
+        (p) => p.kind === 'before' && !p.deleted_at,
+      );
+      if (noDesc || noUnit || noPhoto) {
+        issues.push({ resultId: d.result_id as string | null, noDesc, noUnit, noPhoto });
+      }
+    }
+    return issues;
   } catch {
     return [];
   }

@@ -43,10 +43,25 @@ const s = StyleSheet.create({
   signUnderline: { borderTopWidth: 1, borderColor: BORDER, marginTop: 2 },
   h2: { fontSize: 12, textAlign: 'center', marginVertical: 6, fontWeight: 'bold' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  photoBox: { width: '50%', height: 248, padding: 4 },
-  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', position: 'relative' },
-  photo: { width: '100%', height: '100%', objectFit: 'cover' },
-  photoCaption: { position: 'absolute', bottom: 4, right: 6, fontSize: 9, color: '#000' },
+  // 2×3 一頁 6 張：高度 232 確保三列含頁首仍在一頁內
+  photoBox: { width: '50%', height: 232, padding: 4 },
+  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', position: 'relative', backgroundColor: 'white' },
+  // contain：維持照片原比例不裁切
+  photo: { width: '100%', height: '100%', objectFit: 'contain' },
+  // 標示「序號.(日期)」：白底黑框，避免被照片顏色干擾
+  photoCaption: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#000',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#000',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
   // 改善記錄
   impRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginBottom: 8 },
   impCol: { flex: 1, padding: 4 },
@@ -85,7 +100,7 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
         ? []
         : it.photos
             .filter((p) => p.kind === 'before')
-            .map((p) => ({ src: p.src, label: `${mmdd(grp.date)}-${i + 1}`, desc: it.description })),
+            .map((p) => ({ src: p.src, label: `${i + 1}.(${mmdd(grp.date)})`, desc: it.description })),
     ),
   );
   // 每頁 6 張（2×3）
