@@ -54,25 +54,13 @@ const s = StyleSheet.create({
   signUnderline: { borderTopWidth: 1, borderColor: BORDER, marginTop: 2 },
   h2: { fontSize: 12, textAlign: 'center', marginVertical: 6, fontWeight: 'bold' },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap' },
-  // 2×3 一頁 6 張：高度 232 確保三列含頁首仍在一頁內
-  photoBox: { width: '50%', height: 232, padding: 4 },
-  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', position: 'relative', backgroundColor: 'white' },
-  // contain：維持照片原比例不裁切；靠框左側對齊
-  photo: { width: '100%', height: '100%', objectFit: 'contain', objectPositionX: 0 },
-  // 標示「序號.(日期)」：白底黑框，避免被照片顏色干擾
-  photoCaption: {
-    position: 'absolute',
-    bottom: 3,
-    right: 3,
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: '#000',
-    backgroundColor: 'white',
-    borderWidth: 1,
-    borderColor: '#000',
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-  },
+  // 2×3 一頁 6 張：高度 232（含說明文字）確保三列含頁首仍在一頁內
+  photoBox: { width: '50%', height: 232, padding: 4, flexDirection: 'column' },
+  // 文字方塊：靠左上，項次/日期/說明/區域/班別
+  photoCaption: { fontSize: 8, textAlign: 'left', marginBottom: 2, fontWeight: 'bold' },
+  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', backgroundColor: 'white' },
+  // contain：維持照片原比例不裁切；照片統一靠右
+  photo: { width: '100%', height: '100%', objectFit: 'contain', objectPositionX: '100%' },
   // 改善記錄：與缺失照片頁同尺寸（2欄大圖，一頁3組=6張）
   impBlock: { marginBottom: 4 },
   impPair: { flexDirection: 'row' },
@@ -116,14 +104,18 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
   const mmdd = (iso: string) => iso.slice(5).replace('-', '/');
 
   // 照片頁＝狀況說明（第2頁）上每一筆「未結案」缺失的改善前照片，逐筆對應
-  // 標號與第2頁一致：同一日期群組內的流水號（1. 2. 3.…）
+  // 標題格式與第2頁一致：項次.(日期) 說明「區域」 - 「班別」
+  const caption = (it: (typeof data.notesByDate)[number]['items'][number], i: number, date: string) =>
+    `${i + 1}.(${mmdd(date)}) ${it.description}` +
+    (it.areaName ? `「${it.areaName}」` : '') +
+    (it.unitNames.length ? ` - 「${it.unitNames.join('、')}」` : '');
   const openPhotos = data.notesByDate.flatMap((grp) =>
     grp.items.flatMap((it, i) =>
       it.status === 'resolved'
         ? []
         : it.photos
             .filter((p) => p.kind === 'before')
-            .map((p) => ({ src: p.src, label: `${i + 1}.(${mmdd(grp.date)})`, desc: it.description })),
+            .map((p) => ({ src: p.src, caption: caption(it, i, grp.date) })),
     ),
   );
   // 每頁 6 張（2×3）
@@ -255,9 +247,9 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
           <View style={s.photoGrid}>
             {pg.map((p, i) => (
               <View key={i} style={s.photoBox}>
+                <Text style={s.photoCaption}>{p.caption}</Text>
                 <View style={s.photoInner}>
                   {p.src ? <Image style={s.photo} src={p.src} /> : null}
-                  <Text style={s.photoCaption}>{p.label}</Text>
                 </View>
               </View>
             ))}

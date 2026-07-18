@@ -32,8 +32,9 @@ export default async function DashboardPage() {
   const monthDays = new Set((monthForms ?? []).map((f) => f.inspection_date)).size;
 
   const stats = [
+    { label: '今日巡檢', value: `${todayForms.length} 次`, href: '/inspection' },
     { label: '本月巡檢', value: `${monthDays} 天`, href: '/history' },
-    { label: '本月缺失', value: `${monthDefects ?? 0} 筆`, href: '/open-issues' },
+    { label: '本月缺失', value: `${monthDefects ?? 0} 筆`, href: '/history' },
     { label: '未改善', value: `${openDefects ?? 0} 筆`, href: '/open-issues' },
   ];
 
@@ -63,7 +64,7 @@ export default async function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-foreground">總覽</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {stats.map((s) => (
             <Link
               key={s.label}

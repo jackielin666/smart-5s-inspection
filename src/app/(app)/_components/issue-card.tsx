@@ -173,26 +173,44 @@ export function IssueCard({
             </div>
           </div>
 
-          {/* 2. 改善後照片 */}
-          <div>
-            <div className="mb-1.5 text-xs font-semibold text-foreground">② 改善後照片</div>
-            <PhotoUploader
-              defectId={issue.id}
-              initialPhotos={afterPhotos.map((p) => ({
-                id: p.id,
-                defectId: issue.id,
-                kind: 'after',
-                storageProvider: 'supabase',
-                storageKey: '',
-                thumbKey: null,
-                sortOrder: 0,
-                takenAt: null,
-                url: p.url,
-              }))}
-              onSaving={setSaving}
-              onCountChange={setAfterCount}
-              kind="after"
-            />
+          {/* 2. 改善前｜改善後 並排（左看原況、右拍改善後，方便比對） */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-foreground">改善前</div>
+              {beforePhotos.length === 0 ? (
+                <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted">
+                  無照片
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {beforePhotos.map((p) => (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img key={p.id} src={p.url} alt="改善前" className="aspect-square w-full rounded-lg object-cover" />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-semibold text-foreground">② 改善後照片</div>
+              <PhotoUploader
+                defectId={issue.id}
+                initialPhotos={afterPhotos.map((p) => ({
+                  id: p.id,
+                  defectId: issue.id,
+                  kind: 'after',
+                  storageProvider: 'supabase',
+                  storageKey: '',
+                  thumbKey: null,
+                  sortOrder: 0,
+                  takenAt: null,
+                  url: p.url,
+                }))}
+                onSaving={setSaving}
+                onCountChange={setAfterCount}
+                kind="after"
+                columns={1}
+              />
+            </div>
           </div>
 
           {/* 確認人員 */}

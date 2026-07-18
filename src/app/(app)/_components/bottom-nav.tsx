@@ -67,7 +67,7 @@ export function BottomNav() {
           <Link
             key={tab.href}
             href={tab.href}
-            className="flex flex-col items-center justify-center gap-1.5 py-3.5 text-xs"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-xl py-3.5 text-xs transition active:scale-90 active:bg-brand-tint"
             style={{ color: active ? 'var(--brand)' : 'var(--muted)' }}
           >
             <svg

@@ -84,6 +84,34 @@ const DEFECT_SELECT =
 /** 有效缺失：有說明或有照片才列入報告（空白測試缺失不編號、不佔版面） */
 const isMeaningful = (d: PdfDefect) => d.description.trim() !== '' || d.photos.length > 0;
 
+/** 隔日（ISO 日期字串 +1 天），供台北時區當日範圍查詢 */
+function nextDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * 舊缺失（開立日 < date）中「當日仍未結案」或「當日結案」者：
+ * - 未結案 → 續列狀況說明並帶照片頁
+ * - 當日結案 → 列入當日改善記錄（今日複檢合格也要出現在當日報表）
+ */
+async function fetchOlderDefects(db: SupabaseClient, date: string): Promise<Row[]> {
+  const [{ data: stillOpen }, { data: resolvedToday }] = await Promise.all([
+    db.from('defects').select(DEFECT_SELECT).neq('status', 'resolved').is('deleted_at', null),
+    db
+      .from('defects')
+      .select(DEFECT_SELECT)
+      .eq('status', 'resolved')
+      .is('deleted_at', null)
+      .gte('resolved_at', `${date}T00:00:00+08:00`)
+      .lt('resolved_at', `${nextDay(date)}T00:00:00+08:00`),
+  ]);
+  return [...(stillOpen ?? []), ...(resolvedToday ?? [])].filter(
+    (d: Row) => d.inspections?.inspection_date && d.inspections.inspection_date < date,
+  );
+}
+
 /** 依日期分組（新→舊），供第2頁狀況說明 */
 function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefect[] }[] {
   const byDate = new Map<string, PdfDefect[]>();
@@ -168,26 +196,20 @@ export async function buildInspectionPdfData(
     if (n && !inspectorNames.includes(n)) inspectorNames.push(n);
   }
 
-  // 本日缺失 + 未結案舊缺失（狀況說明往前帶，比照紙本第2頁）
-  const { data: todays } = await db
-    .from('defects')
-    .select('*, defect_units(responsible_units(name)), inspections(inspection_date), defect_photos(kind, storage_key, sort_order, deleted_at)')
-    .eq('inspection_id', inspectionId)
-    .is('deleted_at', null)
-    .order('seq_in_day');
-  const { data: olderOpen } = await db
-    .from('defects')
-    .select('*, defect_units(responsible_units(name)), inspections(inspection_date), defect_photos(kind, storage_key, sort_order, deleted_at)')
-    .neq('status', 'resolved')
-    .is('deleted_at', null)
-    .lt('inspections.inspection_date', inspDate);
+  // 本日缺失 + 舊缺失（未結案續列；本日結案的也列入改善記錄）
+  const [{ data: todays }, older] = await Promise.all([
+    db
+      .from('defects')
+      .select(DEFECT_SELECT)
+      .eq('inspection_id', inspectionId)
+      .is('deleted_at', null)
+      .order('seq_in_day'),
+    fetchOlderDefects(db, inspDate),
+  ]);
 
   const mapDefect = makeMapDefect(inspDate);
   const todayDefects = (todays ?? []).map(mapDefect).filter(isMeaningful);
-  const olderDefects = (olderOpen ?? [])
-    .filter((d: Row) => d.inspections?.inspection_date) // 關聯過濾
-    .map(mapDefect)
-    .filter(isMeaningful);
+  const olderDefects = older.map(mapDefect).filter(isMeaningful);
   const all = [...todayDefects, ...olderDefects];
 
   return {
@@ -261,22 +283,14 @@ export async function buildDailyPdfData(
     else sections.push({ name: row.section, items: [row] });
   }
 
-  // 當日缺失（跨表單）＋ 前幾日未結案
-  const [{ data: todays }, { data: olderOpen }] = await Promise.all([
+  // 當日缺失（跨表單）＋ 舊缺失（未結案續列；本日結案的也列入改善記錄）
+  const [{ data: todays }, older] = await Promise.all([
     db.from('defects').select(DEFECT_SELECT).in('inspection_id', formIds).is('deleted_at', null).order('seq_in_day'),
-    db
-      .from('defects')
-      .select(DEFECT_SELECT)
-      .neq('status', 'resolved')
-      .is('deleted_at', null)
-      .lt('inspections.inspection_date', date),
+    fetchOlderDefects(db, date),
   ]);
   const mapDefect = makeMapDefect(date);
   const todayDefects = (todays ?? []).map(mapDefect).filter(isMeaningful);
-  const olderDefects = (olderOpen ?? [])
-    .filter((d: Row) => d.inspections?.inspection_date)
-    .map(mapDefect)
-    .filter(isMeaningful);
+  const olderDefects = older.map(mapDefect).filter(isMeaningful);
   const all = [...todayDefects, ...olderDefects];
 
   const inspectors: string[] = [];

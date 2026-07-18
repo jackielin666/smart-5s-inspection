@@ -13,12 +13,15 @@ export function PhotoUploader({
   onSaving,
   onCountChange,
   kind = 'before',
+  columns = 3,
 }: {
   defectId: string;
   initialPhotos: PhotoItem[];
   onSaving: (saving: boolean) => void;
   onCountChange?: (count: number) => void;
   kind?: 'before' | 'after';
+  /** 縮圖欄數（預設3；並排比對版面用1） */
+  columns?: 1 | 2 | 3;
 }) {
   const [photos, setPhotos] = useState<PhotoItem[]>(initialPhotos);
 
@@ -123,7 +126,7 @@ export function PhotoUploader({
       {error && <p className="mb-2 text-xs text-fail">{error}</p>}
 
       {photos.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className={columns === 1 ? 'grid grid-cols-1 gap-2' : columns === 2 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-3 gap-2'}>
           {photos.map((p, i) => (
             <div key={p.id} className="relative overflow-hidden rounded-lg border border-border bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
