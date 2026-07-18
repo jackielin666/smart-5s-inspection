@@ -57,3 +57,16 @@ body {
 .safe-top {
   padding-top: env(safe-area-inset-top);
 }
+
+/* 按鈕實體下壓感：按下瞬間縮小+變暗（搭配 press-feedback 的震動回饋） */
+button:active,
+a:active {
+  transform: scale(0.96);
+  filter: brightness(0.93);
+}
+button,
+a {
+  transition:
+    transform 0.08s ease,
+    filter 0.08s ease;
+}

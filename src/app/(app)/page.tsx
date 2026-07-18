@@ -32,11 +32,6 @@ export default async function DashboardPage() {
   const monthDays = new Set((monthForms ?? []).map((f) => f.inspection_date)).size;
 
   const stats = [
-    {
-      label: '今日表單',
-      value: todayForms.length > 0 ? `${todayForms.length} 張` : '未開始',
-      href: '/inspection',
-    },
     { label: '本月巡檢', value: `${monthDays} 天`, href: '/history' },
     { label: '本月缺失', value: `${monthDefects ?? 0} 筆`, href: '/open-issues' },
     { label: '未改善', value: `${openDefects ?? 0} 筆`, href: '/open-issues' },
@@ -68,7 +63,7 @@ export default async function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-bold text-foreground">總覽</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-3">
           {stats.map((s) => (
             <Link
               key={s.label}
@@ -89,6 +84,20 @@ export default async function DashboardPage() {
         formCount={todayForms.length}
         allSubmitted={todayForms.length > 0 && todayForms.every((f) => f.status === 'completed')}
       />
+
+      <Link
+        href="/dashboard"
+        className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
+      >
+        <span className="text-xl">📊</span>
+        <div className="flex-1">
+          <div className="font-bold text-foreground">統計圖表</div>
+          <div className="text-sm text-muted">近30天缺失趨勢 / 班別分佈 / 改善率</div>
+        </div>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </Link>
 
       <Link
         href="/settings"
