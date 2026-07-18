@@ -177,6 +177,10 @@ export function IssueCard({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="mb-1.5 text-xs font-semibold text-foreground">改善前</div>
+              {/* 佔位列：與右側「拍照/相簿」按鈕同高，讓左右照片對齊同一水平 */}
+              <div className="invisible mb-2 flex gap-2" aria-hidden>
+                <div className="flex-1 rounded-lg border px-3 py-2.5 text-sm">·</div>
+              </div>
               {beforePhotos.length === 0 ? (
                 <div className="flex aspect-square w-full items-center justify-center rounded-lg border border-dashed border-border text-xs text-muted">
                   無照片
@@ -250,20 +254,6 @@ export function IssueCard({
               className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
             />
           </div>
-
-          {beforePhotos.length > 0 && (
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-foreground">
-                缺失原始照片（補照請至今日巡檢）
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {beforePhotos.map((p) => (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img key={p.id} src={p.url} alt="" className="aspect-square w-full rounded-lg object-cover" />
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* 3. 送出 */}
           <button

@@ -38,6 +38,7 @@ export interface InspectionPdfData {
   formTitle: string;
   formCode: string;
   rocDate: string; // 民國年
+  reportDate: string; // ISO 報告日期（計算異常天數用）
   area: string;
   legend: string;
   completionNote?: string; // 完成度（結算報告用，例：完成 27/29 項）
@@ -217,6 +218,7 @@ export async function buildInspectionPdfData(
     formTitle: '衛生檢查紀錄表',
     formCode: insp.form_code ?? 'S12501F',
     rocDate: toRocDate(inspDate),
+    reportDate: inspDate,
     area: insp.area ?? '全廠每日',
     legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
     inspectors: inspectorNames,
@@ -304,6 +306,7 @@ export async function buildDailyPdfData(
     formTitle: '衛生檢查紀錄表',
     formCode: (forms[0] as Row).form_code ?? 'S12501F',
     rocDate: toRocDate(date),
+    reportDate: date,
     area: (forms[0] as Row).area ?? '全廠每日',
     legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
     completionNote: `完成 ${doneCount}/${byItem.size} 項`,

@@ -7,6 +7,8 @@ Font.register({
   family: 'NotoTC',
   src: path.join(process.cwd(), 'public/fonts/NotoSansTC-Regular.otf'),
 });
+// 中文沒有空格可斷行，允許逐字換行 → 長字串在格子內自動折成多行，不再溢出
+Font.registerHyphenationCallback((word) => Array.from(word));
 
 const BORDER = '#000';
 const s = StyleSheet.create({
@@ -58,7 +60,21 @@ const s = StyleSheet.create({
   photoBox: { width: '50%', height: 232, padding: 4, flexDirection: 'column' },
   // 文字方塊：靠左上，項次/日期/說明/區域/班別
   photoCaption: { fontSize: 8, textAlign: 'left', marginBottom: 2, fontWeight: 'bold' },
-  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', backgroundColor: 'white' },
+  photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', backgroundColor: 'white', position: 'relative' },
+  // 異常天數標籤：照片框左上角白底黑框
+  photoDays: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#000',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#000',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
   // contain：維持照片原比例不裁切；照片統一靠右
   photo: { width: '100%', height: '100%', objectFit: 'contain', objectPositionX: '100%' },
   // 改善記錄：與缺失照片頁同尺寸（2欄大圖，一頁3組=6張）
@@ -109,13 +125,21 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
     `${i + 1}.(${mmdd(date)}) ${it.description}` +
     (it.areaName ? `「${it.areaName}」` : '') +
     (it.unitNames.length ? ` - 「${it.unitNames.join('、')}」` : '');
+  // 異常天數：報告日 - 開立日 + 1（當日開立=1天）
+  const openDays = (openedDate: string) =>
+    Math.max(
+      1,
+      Math.round(
+        (new Date(`${data.reportDate}T00:00:00Z`).getTime() - new Date(`${openedDate}T00:00:00Z`).getTime()) / 86400000,
+      ) + 1,
+    );
   const openPhotos = data.notesByDate.flatMap((grp) =>
     grp.items.flatMap((it, i) =>
       it.status === 'resolved'
         ? []
         : it.photos
             .filter((p) => p.kind === 'before')
-            .map((p) => ({ src: p.src, caption: caption(it, i, grp.date) })),
+            .map((p) => ({ src: p.src, caption: caption(it, i, grp.date), days: openDays(grp.date) })),
     ),
   );
   // 每頁 6 張（2×3）
@@ -250,6 +274,7 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                 <Text style={s.photoCaption}>{p.caption}</Text>
                 <View style={s.photoInner}>
                   {p.src ? <Image style={s.photo} src={p.src} /> : null}
+                  <Text style={s.photoDays}>異常天數={p.days}天</Text>
                 </View>
               </View>
             ))}
