@@ -73,13 +73,25 @@ const s = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 1,
   },
-  // 改善記錄
-  impRow: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, marginBottom: 8 },
-  impCol: { flex: 1, padding: 4 },
-  impColBorder: { borderRightWidth: 1, borderColor: BORDER },
-  impLabel: { textAlign: 'center', fontWeight: 'bold', marginBottom: 3, fontSize: 9 },
-  impImg: { width: '100%', height: 150, objectFit: 'contain', objectPositionX: 0, backgroundColor: 'white' },
-  impDesc: { marginBottom: 3, fontWeight: 'bold' },
+  // 改善記錄：與缺失照片頁同尺寸（2欄大圖，一頁3組=6張）
+  impBlock: { marginBottom: 4 },
+  impPair: { flexDirection: 'row' },
+  impCell: { width: '50%', height: 208, padding: 4 },
+  impTag: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    fontSize: 10,
+    fontWeight: 'bold',
+    color: '#000',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#000',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+  },
+  impEmpty: { margin: 'auto', color: '#999' },
+  impDesc: { marginBottom: 2, fontWeight: 'bold' },
 });
 
 /** 三大類的縱向文字 */
@@ -260,20 +272,24 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
           <Header d={data} />
           <Text style={s.h2}>改善記錄（改善前 / 改善後）</Text>
           {data.improvements.map((im, i) => (
-            <View key={i} wrap={false}>
+            <View key={i} wrap={false} style={s.impBlock}>
               <Text style={s.impDesc}>
                 {im.seq}.({mmdd(im.date)}) {im.description}
                 {im.areaName ? `「${im.areaName}」` : ''}
                 {im.unitNames.length ? ` - 「${im.unitNames.join('、')}」` : ''}
               </Text>
-              <View style={s.impRow}>
-                <View style={[s.impCol, s.impColBorder]}>
-                  <Text style={s.impLabel}>改善前</Text>
-                  {im.before[0]?.src ? <Image style={s.impImg} src={im.before[0].src} /> : <Text>（無）</Text>}
+              <View style={s.impPair}>
+                <View style={s.impCell}>
+                  <View style={s.photoInner}>
+                    {im.before[0]?.src ? <Image style={s.photo} src={im.before[0].src} /> : <Text style={s.impEmpty}>（無）</Text>}
+                    <Text style={s.impTag}>改善前</Text>
+                  </View>
                 </View>
-                <View style={s.impCol}>
-                  <Text style={s.impLabel}>改善後</Text>
-                  {im.after[0]?.src ? <Image style={s.impImg} src={im.after[0].src} /> : <Text>（無）</Text>}
+                <View style={s.impCell}>
+                  <View style={s.photoInner}>
+                    {im.after[0]?.src ? <Image style={s.photo} src={im.after[0].src} /> : <Text style={s.impEmpty}>（無）</Text>}
+                    <Text style={s.impTag}>改善後</Text>
+                  </View>
                 </View>
               </View>
             </View>

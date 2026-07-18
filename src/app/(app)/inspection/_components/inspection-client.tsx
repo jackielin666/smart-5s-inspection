@@ -325,23 +325,6 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
             {submitting ? '處理中…' : '送出此表單（送出後鎖定）'}
           </button>
         )}
-        <button
-          onClick={() => {
-            if (!readOnly) {
-              setDialog({
-                title: '提醒',
-                mode: 'alert',
-                lines: ['此表單尚未送出。', '請先「送出此表單」，再檢視當日報告 PDF。'],
-              });
-              return;
-            }
-            window.open(`/api/reports/${inspection.inspectionDate}/pdf`, '_blank', 'noopener,noreferrer');
-          }}
-          className="block w-full rounded-2xl border-2 py-3.5 text-center text-base font-bold transition active:scale-[0.99]"
-          style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
-        >
-          檢視當日報告 PDF（彙整所有表單）
-        </button>
         <p className="text-center text-xs text-muted">
           已完成 {doneCount}/{results.length} 項{!readOnly && ' · 全部完成才能送出'}
         </p>

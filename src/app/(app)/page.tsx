@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/infrastructure/supabase/server';
 import { taipeiToday } from '@/domain/date';
+import { TodayReportButton } from './_components/today-report-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +83,12 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <TodayReportButton
+        date={today}
+        formCount={todayForms.length}
+        allSubmitted={todayForms.length > 0 && todayForms.every((f) => f.status === 'completed')}
+      />
 
       <Link
         href="/settings"
