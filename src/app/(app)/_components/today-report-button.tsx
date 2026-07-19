@@ -40,7 +40,7 @@ export function TodayReportButton({
     <>
       <button
         onClick={handleClick}
-        className="block w-full rounded-2xl border-2 py-3.5 text-center text-base font-bold transition active:scale-[0.99]"
+        className="block w-full rounded-2xl border-2 py-4 text-center text-base font-bold transition active:scale-[0.99]"
         style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
       >
         檢視當日報告 PDF（彙整所有表單）

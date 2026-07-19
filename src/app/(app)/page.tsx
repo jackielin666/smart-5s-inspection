@@ -44,7 +44,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <Link
         href="/inspection"
         className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm active:scale-[0.99]"
@@ -73,12 +73,12 @@ export default async function DashboardPage() {
             <Link
               key={s.label}
               href={s.href}
-              className="rounded-2xl border border-border bg-surface p-2.5 text-center shadow-sm active:scale-[0.99]"
+              className="rounded-2xl border border-border bg-surface p-3.5 text-center shadow-sm active:scale-[0.99]"
             >
-              <div className="text-lg font-bold leading-tight" style={{ color: 'var(--brand)' }}>
+              <div className="text-xl font-bold leading-tight" style={{ color: 'var(--brand)' }}>
                 {s.value}
               </div>
-              <div className="mt-0.5 text-[11px] text-muted">{s.label}</div>
+              <div className="mt-1 text-xs text-muted">{s.label}</div>
             </Link>
           ))}
         </div>
@@ -115,11 +115,11 @@ function FeatureCard({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-2.5 rounded-2xl bg-surface p-3.5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
+      className={`flex items-center gap-3 rounded-2xl bg-surface px-4 py-5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
       style={admin ? { borderColor: 'var(--brand)' } : undefined}
     >
-      <span className="text-xl">{icon}</span>
-      <span className="flex-1 text-sm font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
+      <span className="text-2xl">{icon}</span>
+      <span className="flex-1 text-base font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
         {title}
       </span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

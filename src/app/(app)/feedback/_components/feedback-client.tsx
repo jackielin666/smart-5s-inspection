@@ -150,17 +150,19 @@ export function FeedbackClient({
               {r.content}
             </p>
             {isAdmin && (
-              <button
-                onClick={() => toggleStatus(r)}
-                className="mt-2 rounded-lg border px-3 py-1 text-xs font-semibold active:scale-95"
-                style={
-                  r.status === 'open'
-                    ? { borderColor: 'var(--pass)', color: 'var(--pass)', background: 'white' }
-                    : { borderColor: 'var(--border)', color: 'var(--muted)', background: 'white' }
-                }
-              >
-                {r.status === 'open' ? '✓ 標記已處理' : '↩ 改回待處理'}
-              </button>
+              <div className="mt-2 flex justify-end">
+                <button
+                  onClick={() => toggleStatus(r)}
+                  className="rounded-lg border px-3.5 py-1.5 text-xs font-semibold active:scale-95"
+                  style={
+                    r.status === 'open'
+                      ? { borderColor: 'var(--pass)', color: 'var(--pass)', background: 'white' }
+                      : { borderColor: 'var(--border)', color: 'var(--muted)', background: 'white' }
+                  }
+                >
+                  {r.status === 'open' ? '✓ 已處理確認' : '↩ 改回待處理'}
+                </button>
+              </div>
             )}
           </div>
         ))}
