@@ -10,14 +10,13 @@ export interface MonthStat {
 
 export interface PersonRow {
   name: string;
-  cur: MonthStat;
-  prev: MonthStat;
+  months: { label: string; stat: MonthStat }[]; // 新→舊：[當月, -1, -2, -3]
   daily: { date: string; forms: number; defects: number }[]; // 本月每日明細
 }
 
 function StatLine({ label, s, highlight }: { label: string; s: MonthStat; highlight: boolean }) {
   return (
-    <div className={`flex items-center justify-between text-xs ${highlight ? '' : 'opacity-60'}`}>
+    <div className={`flex items-center justify-between text-xs ${highlight ? '' : 'opacity-55'}`}>
       <span className="w-10 shrink-0 font-semibold text-muted">{label}</span>
       <span className="flex flex-1 justify-end gap-3">
         <span style={{ color: 'var(--brand)' }}>開單 {s.forms} 次</span>
@@ -28,18 +27,10 @@ function StatLine({ label, s, highlight }: { label: string; s: MonthStat; highli
   );
 }
 
-/** 人員統計：本月＋上月（開單/開立缺失/如期結案），點名展開本月每日明細 */
-export function PersonStats({
-  rows,
-  monthLabel,
-  prevMonthLabel,
-}: {
-  rows: PersonRow[];
-  monthLabel: string;
-  prevMonthLabel: string;
-}) {
+/** 人員統計：當月＋前3個月（開單/開立缺失/如期結案），點名展開本月每日明細 */
+export function PersonStats({ rows }: { rows: PersonRow[] }) {
   const [openName, setOpenName] = useState<string | null>(null);
-  if (rows.length === 0) return <p className="text-sm text-muted">（近兩個月尚無檢查紀錄）</p>;
+  if (rows.length === 0) return <p className="text-sm text-muted">（近 4 個月尚無檢查紀錄）</p>;
   return (
     <div className="space-y-2">
       {rows.map((r) => {
@@ -55,8 +46,9 @@ export function PersonStats({
                 <span className="text-xs text-muted">{opened ? '▲ 收合' : '▼ 每日明細'}</span>
               </div>
               <div className="space-y-1">
-                <StatLine label={monthLabel} s={r.cur} highlight />
-                <StatLine label={prevMonthLabel} s={r.prev} highlight={false} />
+                {r.months.map((m, i) => (
+                  <StatLine key={m.label} label={m.label} s={m.stat} highlight={i === 0} />
+                ))}
               </div>
             </button>
             {opened && (
