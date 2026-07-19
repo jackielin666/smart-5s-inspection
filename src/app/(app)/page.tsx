@@ -115,16 +115,16 @@ function FeatureCard({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-2xl bg-surface px-4 py-5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
+      className={`flex items-center justify-center gap-2.5 rounded-2xl bg-surface px-3 py-5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
       style={admin ? { borderColor: 'var(--brand)' } : undefined}
     >
       <span className="text-2xl">{icon}</span>
-      <span className="flex-1 text-base font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
+      <span
+        className="whitespace-nowrap text-[15px] font-bold"
+        style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}
+      >
         {title}
       </span>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="m9 18 6-6-6-6" />
-      </svg>
     </Link>
   );
 }
