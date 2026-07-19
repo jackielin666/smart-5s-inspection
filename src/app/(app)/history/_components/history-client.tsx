@@ -89,15 +89,13 @@ export function HistoryClient({ days }: { days: HistoryDayRow[] }) {
 
                 {opened && (
                   <div className="space-y-2 border-t border-border bg-background/50 p-3">
-                    <a
-                      href={`/api/reports/${d.date}/pdf`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Link
+                      href={`/report/${d.date}`}
                       className="block rounded-xl border-2 py-2.5 text-center text-sm font-bold active:scale-[0.99]"
                       style={{ borderColor: 'var(--brand)', color: 'var(--brand)', background: 'white' }}
                     >
                       當日報告 PDF（彙整）
-                    </a>
+                    </Link>
                     {d.forms.map((f) => (
                       <Link
                         key={f.id}

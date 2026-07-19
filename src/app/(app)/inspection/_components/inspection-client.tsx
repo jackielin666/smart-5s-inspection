@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { Defect, Inspection, InspectionResult, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
-import { formatFriendlyDate } from '@/domain/date';
+import { formatFriendlyDate, taipeiToday } from '@/domain/date';
 import { setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
 import {
   addDefectForResult,
@@ -46,7 +46,9 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
   const [status, setStatus] = useState(inspection.status);
   const [submitting, setSubmitting] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const readOnly = status === 'completed'; // 送出後鎖定唯讀
+  // 逾期未送出（非今日的草稿）也鎖定：任何人不得再修改，內容由當日 16:30 結算處理
+  const expired = status !== 'completed' && inspection.inspectionDate < taipeiToday();
+  const readOnly = status === 'completed' || expired; // 送出後/逾期 鎖定唯讀
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
   const latestVerdictRef = useRef(new Map<string, ItemVerdict | null>());
   const opChainRef = useRef(new Map<string, Promise<void>>());
@@ -254,11 +256,11 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
             className="rounded-full px-3 py-1 text-xs font-semibold"
             style={
               readOnly
-                ? { background: 'var(--pass)', color: 'white' }
+                ? { background: expired ? 'var(--muted)' : 'var(--pass)', color: 'white' }
                 : { background: 'var(--brand-tint)', color: 'var(--brand)' }
             }
           >
-            {readOnly ? '已送出鎖定' : '自動儲存'}
+            {expired ? '逾期鎖定' : readOnly ? '已送出鎖定' : '自動儲存'}
           </div>
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-sm">
@@ -311,9 +313,9 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
         {readOnly ? (
           <div
             className="w-full rounded-2xl py-4 text-center text-base font-bold text-white shadow-sm"
-            style={{ background: 'var(--pass)' }}
+            style={{ background: expired ? 'var(--muted)' : 'var(--pass)' }}
           >
-            ✓ 已送出鎖定（16:30 彙整為當日報告）
+            {expired ? '⚠ 逾期未送出，已鎖定不可修改' : '✓ 已送出鎖定（16:30 彙整為當日報告）'}
           </div>
         ) : (
           <button

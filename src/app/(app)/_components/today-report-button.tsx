@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppDialog, type DialogState } from './app-dialog';
 
 /** 首頁「檢視當日報告」：無表單提示；有未送出表單則提醒後仍可預覽 */
@@ -13,8 +14,10 @@ export function TodayReportButton({
   formCount: number;
   allSubmitted: boolean;
 }) {
+  const router = useRouter();
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const open = () => window.open(`/api/reports/${date}/pdf`, '_blank', 'noopener,noreferrer');
+  // App 內檢視頁（保留返回按鈕），不直接開 PDF 以免無法回到系統
+  const open = () => router.push(`/report/${date}`);
 
   function handleClick() {
     if (formCount === 0) {

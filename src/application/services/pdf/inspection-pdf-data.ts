@@ -30,6 +30,7 @@ export interface PdfDefect {
   areaName: string | null;
   inspectionDate: string;
   status: string; // open / in_progress / resolved
+  resolvedAt: string | null; // 結案時間（ISO timestamp）
   photos: PdfPhoto[];
 }
 
@@ -46,10 +47,11 @@ export interface InspectionPdfData {
   sections: { name: string; items: PdfResultRow[] }[];
   // 狀況說明：本日新缺失 + 前幾日未結案（依日期分組）
   notesByDate: { date: string; items: PdfDefect[] }[];
-  // 改善記錄：有改善後照片的缺失，改善前/後對比（編號與狀況說明一致）
+  // 改善記錄：「當日結案」的缺失，改善前/後對比（編號與狀況說明一致）
   improvements: {
     seq: number;
     date: string;
+    resolvedDate: string; // 改善（結案）日期 ISO
     description: string;
     unitNames: string[];
     areaName: string | null;
@@ -72,6 +74,7 @@ function makeMapDefect(fallbackDate: string) {
     areaName: d.area_name,
     inspectionDate: d.inspections?.inspection_date ?? fallbackDate,
     status: d.status ?? 'open',
+    resolvedAt: d.resolved_at ?? null,
     photos: (d.defect_photos ?? [])
       .filter((p: Row) => !p.deleted_at)
       .sort((a: Row, b: Row) => a.sort_order - b.sort_order)
@@ -125,17 +128,24 @@ function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefec
     .map(([date, items]) => ({ date, items }));
 }
 
-/** 改善記錄：從狀況說明分組取出有改善後照片者，編號沿用該日期組內序號 */
+/** timestamp → 台北時區日期字串 */
+const toTaipeiDate = (ts: string) => new Date(new Date(ts).getTime() + 8 * 3600e3).toISOString().slice(0, 10);
+
+/** 改善記錄：只列「報告當日結案」的缺失，編號沿用狀況說明該日期組內序號 */
 function toImprovements(
   groups: { date: string; items: PdfDefect[] }[],
+  reportDate: string,
 ): InspectionPdfData['improvements'] {
   const out: InspectionPdfData['improvements'] = [];
   for (const g of groups) {
     g.items.forEach((d, i) => {
-      if (!d.photos.some((p) => p.kind === 'after')) return;
+      if (d.status !== 'resolved' || !d.resolvedAt) return;
+      const resolvedDate = toTaipeiDate(d.resolvedAt);
+      if (resolvedDate !== reportDate) return; // 只顯示當日改善的項目
       out.push({
         seq: i + 1,
         date: d.inspectionDate,
+        resolvedDate,
         description: d.description,
         unitNames: d.unitNames,
         areaName: d.areaName,
@@ -224,7 +234,7 @@ export async function buildInspectionPdfData(
     inspectors: inspectorNames,
     sections,
     notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(groupNotesByDate(all)),
+    improvements: toImprovements(groupNotesByDate(all), inspDate),
   };
 }
 
@@ -313,6 +323,6 @@ export async function buildDailyPdfData(
     inspectors,
     sections,
     notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(groupNotesByDate(all)),
+    improvements: toImprovements(groupNotesByDate(all), date),
   };
 }

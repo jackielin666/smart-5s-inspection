@@ -58,11 +58,6 @@ export function IssueCard({
       setDialog({ mode: 'alert', lines: ['請先選擇確認人員。'] });
       return;
     }
-    // 結案必有改善前照片（補拍入口在今日巡檢），確保報告能前後對照
-    if (pendingStatus === 'resolved' && beforePhotos.length === 0) {
-      setDialog({ mode: 'alert', lines: ['此缺失沒有「改善前照片」。', '請先至今日巡檢該項目補拍，才能結案。'] });
-      return;
-    }
     // 結案必拍改善後照片
     if (pendingStatus === 'resolved' && afterCount === 0) {
       setDialog({ mode: 'alert', lines: ['標記「已改善」前，請先上傳改善後照片。'] });
@@ -173,7 +168,8 @@ export function IssueCard({
             </div>
           </div>
 
-          {/* 2. 改善前｜改善後 並排（左看原況、右拍改善後，方便比對） */}
+          {/* 2. 改善前｜改善後 並排：只有選「已改善」才開放拍照，避免其他狀態誤傳照片 */}
+          {pendingStatus === 'resolved' && (
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="mb-1.5 text-xs font-semibold text-foreground">改善前</div>
@@ -216,6 +212,7 @@ export function IssueCard({
               />
             </div>
           </div>
+          )}
 
           {/* 確認人員 */}
           <div>

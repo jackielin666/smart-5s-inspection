@@ -68,25 +68,23 @@ function HBar({ name, count, max }: { name: string; count: number; max: number }
   );
 }
 
-function TopList({ rows, topN }: { rows: [string, number][]; topN: number }) {
+/** 依表單大類的缺失數量直條圖 */
+function CategoryBars({ rows }: { rows: [string, number][] }) {
   if (rows.length === 0) return <p className="text-sm text-muted">（尚無缺失）</p>;
+  const max = Math.max(1, ...rows.map(([, c]) => c));
   return (
-    <ol className="space-y-1.5">
-      {rows.slice(0, topN).map(([desc, count], i) => (
-        <li key={desc} className="flex items-center gap-2 text-sm">
-          <span
-            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
-            style={{ background: i < 3 ? 'var(--fail)' : 'var(--muted)' }}
-          >
-            {i + 1}
-          </span>
-          <span className="flex-1 truncate text-foreground">{desc}</span>
-          <span className="shrink-0 text-xs font-bold" style={{ color: 'var(--brand)' }}>
-            {count} 次
-          </span>
-        </li>
+    <div className="flex h-44 items-stretch justify-around gap-3 px-2">
+      {rows.map(([name, count]) => (
+        <div key={name} className="flex h-full max-w-24 flex-1 flex-col items-center justify-end">
+          <div className="text-xs font-bold" style={{ color: 'var(--brand)' }}>{count}</div>
+          <div
+            className="w-full rounded-t"
+            style={{ height: `${(count / max) * 75}%`, minHeight: 4, background: 'var(--brand)' }}
+          />
+          <div className="mt-1 break-all text-center text-[10px] leading-tight text-foreground">{name}</div>
+        </div>
       ))}
-    </ol>
+    </div>
   );
 }
 
@@ -100,7 +98,7 @@ export default async function DashboardPage() {
     supabase
       .from('defects')
       .select(
-        'id, status, created_at, resolved_at, due_date, description, area_name, inspections(inspection_date), defect_units(responsible_units(name))',
+        'id, status, created_at, resolved_at, due_date, description, area_name, inspections(inspection_date), defect_units(responsible_units(name)), inspection_results(section_name_snapshot)',
       )
       .is('deleted_at', null)
       .gte('created_at', `${year}-01-01T00:00:00+08:00`),
@@ -179,17 +177,25 @@ export default async function DashboardPage() {
   const areaRows = [...byArea.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12);
   const maxArea = Math.max(1, ...areaRows.map(([, c]) => c));
 
-  // --- Top：該月 Top5 / 年度 Top10（依缺失說明彙整）---
-  const topOf = (rows: Row[]) => {
+  // --- 該月每日異常件數 ---
+  const daysInMonth = new Date(Number(year), Number(month.slice(5)), 0).getDate();
+  const dailyCounts = Array.from({ length: daysInMonth }, (_, i) => {
+    const dd = `${month}-${String(i + 1).padStart(2, '0')}`;
+    return { day: i + 1, count: monthRows.filter((d) => defectDate(d) === dd).length };
+  });
+  const maxDaily = Math.max(1, ...dailyCounts.map((d) => d.count));
+
+  // --- 缺失數量統計（依表單 1~29 項的大類彙整）---
+  const sectionCounts = (rows: Row[]): [string, number][] => {
     const m = new Map<string, number>();
     for (const d of rows) {
-      const key = ((d.description as string | null) ?? '').trim();
-      if (key) m.set(key, (m.get(key) ?? 0) + 1);
+      const sec = ((d.inspection_results?.section_name_snapshot as string | null) ?? '').trim() || '其他';
+      m.set(sec, (m.get(sec) ?? 0) + 1);
     }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]) as [string, number][];
+    return [...m.entries()].sort((a, b) => b[1] - a[1]);
   };
-  const monthTop = topOf(monthRows);
-  const yearTop = topOf(yearRows);
+  const monthSections = sectionCounts(monthRows);
+  const yearSections = sectionCounts(yearRows);
 
   const monthLabel = Number(month.slice(5));
 
@@ -202,8 +208,14 @@ export default async function DashboardPage() {
         <h2 className="mb-2 text-base font-bold text-foreground">當月統計（{monthLabel} 月）</h2>
         <div className="grid grid-cols-3 gap-2.5">
           <StatTile value={mTotal} label="缺失數" color="var(--brand)" />
+          <StatTile value={mTotal - mResolved.length} label="未改善缺失數" color="var(--pending)" />
           <StatTile value={mRate} label="改善率" color="var(--pass)" />
-          <StatTile value={mAvgClose} label="平均結案(天)" color="var(--pending)" />
+          {/* 規定 5 個工作日內結案：達標綠、超標紅 */}
+          <StatTile
+            value={mAvgClose}
+            label="平均結案(天)"
+            color={mAvgClose !== '—' && Number(mAvgClose) > 5 ? 'var(--fail)' : 'var(--pass)'}
+          />
           <StatTile value={overdue.length} label="逾期未結案" color="var(--fail)" />
           <StatTile value={avgOverdueDays} label="平均逾期(天)" color="var(--fail)" />
         </div>
@@ -220,6 +232,29 @@ export default async function DashboardPage() {
         <h2 className="mb-3 text-base font-bold text-foreground">年度統計（{year}）— 每月如期改善率</h2>
         <MonthBars data={monthlyOnTime} color="var(--pass)" percent />
         <p className="mt-1 text-xs text-muted">如期改善率＝該月開立缺失中，於改善期限內結案的比例</p>
+      </section>
+
+      {/* 2.5 該月每日異常件數 */}
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-foreground">每日異常件數（{monthLabel} 月）</h2>
+        <div className="flex h-32 items-stretch gap-[2px]">
+          {dailyCounts.map((d) => (
+            <div key={d.day} className="flex h-full flex-1 flex-col items-center justify-end">
+              {d.count > 0 && <div className="text-[8px] leading-none text-muted">{d.count}</div>}
+              <div
+                className="w-full rounded-t"
+                style={{
+                  height: `${(d.count / maxDaily) * 85}%`,
+                  minHeight: d.count > 0 ? 3 : 1,
+                  background: d.count > 0 ? 'var(--fail)' : 'var(--border)',
+                }}
+              />
+              <div className="mt-0.5 text-[7px] text-muted">
+                {d.day === 1 || d.day % 5 === 0 ? d.day : ''}
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* 3. 該月班別分佈 */}
@@ -251,16 +286,16 @@ export default async function DashboardPage() {
         <p className="mt-2 text-xs text-muted">同一筆缺失若涉及多個區域，各區域分別計 1 次</p>
       </section>
 
-      {/* 5. 該月缺失 Top 5 */}
+      {/* 5. 當月缺失數量統計（大類） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <h2 className="mb-3 text-base font-bold text-foreground">當月缺失 Top 5（{monthLabel} 月）</h2>
-        <TopList rows={monthTop} topN={5} />
+        <h2 className="mb-3 text-base font-bold text-foreground">當月缺失數量統計（{monthLabel} 月，依大類）</h2>
+        <CategoryBars rows={monthSections} />
       </section>
 
-      {/* 6. 年度缺失 Top 10 */}
+      {/* 6. 年度缺失數量統計（大類） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <h2 className="mb-3 text-base font-bold text-foreground">年度缺失 Top 10（{year}）</h2>
-        <TopList rows={yearTop} topN={10} />
+        <h2 className="mb-3 text-base font-bold text-foreground">年度缺失數量統計（{year}，依大類）</h2>
+        <CategoryBars rows={yearSections} />
       </section>
     </div>
   );

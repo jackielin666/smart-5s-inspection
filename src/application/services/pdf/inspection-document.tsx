@@ -96,6 +96,20 @@ const s = StyleSheet.create({
   },
   impEmpty: { margin: 'auto', color: '#999' },
   impDesc: { marginBottom: 2, fontWeight: 'bold' },
+  // 改善日期標籤：改善後格左下角白底黑框
+  impDate: {
+    position: 'absolute',
+    bottom: 3,
+    left: 3,
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: '#000',
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: '#000',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+  },
 });
 
 /** 三大類的縱向文字 */
@@ -306,6 +320,7 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                   <View style={s.photoInner}>
                     {im.after[0]?.src ? <Image style={s.photo} src={im.after[0].src} /> : <Text style={s.impEmpty}>（無）</Text>}
                     <Text style={s.impTag}>改善後</Text>
+                    <Text style={s.impDate}>改善日期 {mmdd(im.resolvedDate)}</Text>
                   </View>
                 </View>
               </View>
