@@ -44,7 +44,7 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <Link
         href="/inspection"
         className="flex items-center gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm active:scale-[0.99]"
@@ -68,18 +68,17 @@ export default async function DashboardPage() {
       </Link>
 
       <section>
-        <h2 className="mb-3 text-lg font-bold text-foreground">總覽</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-4 gap-2">
           {stats.map((s) => (
             <Link
               key={s.label}
               href={s.href}
-              className="rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
+              className="rounded-2xl border border-border bg-surface p-2.5 text-center shadow-sm active:scale-[0.99]"
             >
-              <div className="text-2xl font-bold" style={{ color: 'var(--brand)' }}>
+              <div className="text-lg font-bold leading-tight" style={{ color: 'var(--brand)' }}>
                 {s.value}
               </div>
-              <div className="mt-1 text-sm text-muted">{s.label}</div>
+              <div className="mt-0.5 text-[11px] text-muted">{s.label}</div>
             </Link>
           ))}
         </div>
@@ -91,50 +90,41 @@ export default async function DashboardPage() {
         allSubmitted={todayForms.length > 0 && todayForms.every((f) => f.status === 'completed')}
       />
 
-      <Link
-        href="/dashboard"
-        className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
-      >
-        <span className="text-xl">📊</span>
-        <div className="flex-1">
-          <div className="font-bold text-foreground">統計圖表</div>
-          <div className="text-sm text-muted">近30天缺失趨勢 / 班別分佈 / 改善率</div>
-        </div>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m9 18 6-6-6-6" />
-        </svg>
-      </Link>
-
-      {isAdmin && (
-        <Link
-          href="/annual"
-          className="flex items-center gap-3 rounded-2xl border-2 bg-surface p-4 shadow-sm active:scale-[0.99]"
-          style={{ borderColor: 'var(--brand)' }}
-        >
-          <span className="text-xl">📈</span>
-          <div className="flex-1">
-            <div className="font-bold" style={{ color: 'var(--brand)' }}>年度異常分析（管理者）</div>
-            <div className="text-sm text-muted">柏拉圖 / 重複發生 / 交叉分析 / CSV 匯出</div>
-          </div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m9 18 6-6-6-6" />
-          </svg>
-        </Link>
-      )}
-
-      <Link
-        href="/settings"
-        className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm active:scale-[0.99]"
-      >
-        <span className="text-xl">⚙️</span>
-        <div className="flex-1">
-          <div className="font-bold text-foreground">設定管理</div>
-          <div className="text-sm text-muted">檢查人員 / 權責班別 / 發生區域 的新增與停用</div>
-        </div>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="m9 18 6-6-6-6" />
-        </svg>
-      </Link>
+      <div className="grid grid-cols-2 gap-3">
+        <FeatureCard href="/dashboard" icon="📊" title="統計圖表" />
+        <FeatureCard href="/settings" icon="⚙️" title="設定管理" />
+        {isAdmin && <FeatureCard href="/annual" icon="📈" title="年度異常分析" admin />}
+        <FeatureCard href="/feedback" icon="📝" title="意見反饋" />
+      </div>
     </div>
+  );
+}
+
+/** 首頁功能小卡（2欄緊湊排版） */
+function FeatureCard({
+  href,
+  icon,
+  title,
+  admin = false,
+}: {
+  href: string;
+  icon: string;
+  title: string;
+  admin?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center gap-2.5 rounded-2xl bg-surface p-3.5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
+      style={admin ? { borderColor: 'var(--brand)' } : undefined}
+    >
+      <span className="text-xl">{icon}</span>
+      <span className="flex-1 text-sm font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
+        {title}
+      </span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
+    </Link>
   );
 }
