@@ -72,6 +72,14 @@ function HBar({ name, count, max }: { name: string; count: number; max: number }
 /** 項次固定配色（1~29 各自穩定的顏色） */
 const itemColor = (no: number) => `hsl(${(no * 53) % 360} 52% 42%)`;
 
+/** 項次 → 圓圈數字（①～㉙） */
+const circled = (n: number) =>
+  n >= 1 && n <= 20
+    ? String.fromCharCode(0x245f + n)
+    : n >= 21 && n <= 35
+      ? String.fromCharCode(0x3250 + (n - 20))
+      : String(n);
+
 /** 依表單大類的缺失數量「堆疊」直條圖：段＝項次，段內標項次序號 */
 function CategoryBars({
   rows,
@@ -92,11 +100,11 @@ function CategoryBars({
               return (
                 <div
                   key={no}
-                  className="flex w-full items-center justify-center text-[9px] font-bold leading-none text-white"
+                  className="flex w-full items-center justify-center gap-0.5 text-[10px] font-bold leading-none text-white"
                   style={{ height: segPx, background: itemColor(no) }}
                   title={`第 ${no} 項：${count} 筆`}
                 >
-                  {segPx >= 11 ? no : ''}
+                  {segPx >= 12 ? `${circled(no)} ${count}` : ''}
                 </div>
               );
             })}
@@ -320,14 +328,14 @@ export default async function DashboardPage() {
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-foreground">當月缺失數量統計（{monthLabel} 月，依大類）</h2>
         <CategoryBars rows={monthSections} />
-        <p className="mt-2 text-center text-xs text-muted">柱內數字＝檢查表項次（1~29）</p>
+        <p className="mt-2 text-center text-xs text-muted">柱內標示：①項次 次數（例：① 4＝第1項發生4次）</p>
       </section>
 
       {/* 6. 年度缺失數量統計（大類） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-foreground">年度缺失數量統計（{year}，依大類）</h2>
         <CategoryBars rows={yearSections} />
-        <p className="mt-2 text-center text-xs text-muted">柱內數字＝檢查表項次（1~29）</p>
+        <p className="mt-2 text-center text-xs text-muted">柱內標示：①項次 次數（例：① 4＝第1項發生4次）</p>
       </section>
     </div>
   );
