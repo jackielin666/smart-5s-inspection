@@ -122,6 +122,10 @@ export default async function DashboardPage() {
   const today = taipeiToday();
   const year = today.slice(0, 4);
   const month = today.slice(0, 7);
+  // 上個月（跨年也正確）
+  const prevD = new Date(`${month}-01T00:00:00Z`);
+  prevD.setUTCMonth(prevD.getUTCMonth() - 1);
+  const prevMonth = prevD.toISOString().slice(0, 7);
 
   const [{ data: yearDefects }, { data: allOpen }, { data: holidayRows }, { data: unitRows0 }, { data: monthForms }] =
     await Promise.all([
@@ -143,9 +147,16 @@ export default async function DashboardPage() {
         .from('inspections')
         .select('filled_by_name, inspection_date')
         .is('deleted_at', null)
-        .gte('inspection_date', `${month}-01`),
+        .gte('inspection_date', `${prevMonth}-01`),
     ]);
   const allUnitNames = (unitRows0 ?? []).map((u: Row) => u.name as string);
+
+  // 人員統計專用：涵蓋上月＋本月的缺失（跨年時 yearRows 不含去年12月，故獨立查詢）
+  const { data: personDefects } = await supabase
+    .from('defects')
+    .select('opened_by_name, status, resolved_at, due_date, created_at, inspections(inspection_date)')
+    .is('deleted_at', null)
+    .gte('created_at', `${prevMonth}-01T00:00:00+08:00`);
   // 標準處理天數＝5個工作日：所有天數統計一律跳過週六日與假日
   const holidays = new Set<string>((holidayRows ?? []).map((h: Row) => h.holiday_date as string));
 
@@ -219,39 +230,63 @@ export default async function DashboardPage() {
     }
   }
   const heatMax = Math.max(1, ...[...unitMonth.values()].flat());
+  // 熱力圖每月總計列
+  const heatTotals = Array.from({ length: 12 }, (_, i) =>
+    [...unitMonth.values()].reduce((s, counts) => s + counts[i], 0),
+  );
 
-  // --- 人員統計（當月）：開單次數＋開立缺失數＋每日明細 ---
-  const personMap = new Map<string, { forms: number; defects: number; daily: Map<string, { forms: number; defects: number }> }>();
-  const personDay = (name: string, date: string) => {
-    if (!personMap.has(name)) personMap.set(name, { forms: 0, defects: 0, daily: new Map() });
-    const p = personMap.get(name)!;
-    if (!p.daily.has(date)) p.daily.set(date, { forms: 0, defects: 0 });
-    return { p, d: p.daily.get(date)! };
+  // --- 人員統計（本月＋上月）：開單次數／開立缺失／如期結案（該人開立的缺失於期限內結案）---
+  type MonthStat = { forms: number; defects: number; onTime: number };
+  const emptyStat = (): MonthStat => ({ forms: 0, defects: 0, onTime: 0 });
+  const personMap = new Map<string, { cur: MonthStat; prev: MonthStat; daily: Map<string, { forms: number; defects: number }> }>();
+  const person = (name: string) => {
+    if (!personMap.has(name)) personMap.set(name, { cur: emptyStat(), prev: emptyStat(), daily: new Map() });
+    return personMap.get(name)!;
   };
   for (const f of (monthForms ?? []) as Row[]) {
     const name = (f.filled_by_name as string | null)?.trim();
     if (!name) continue;
-    const { p, d } = personDay(name, f.inspection_date as string);
-    p.forms += 1;
-    d.forms += 1;
+    const date = f.inspection_date as string;
+    const p = person(name);
+    if (date.startsWith(month)) {
+      p.cur.forms += 1;
+      if (!p.daily.has(date)) p.daily.set(date, { forms: 0, defects: 0 });
+      p.daily.get(date)!.forms += 1;
+    } else if (date.startsWith(prevMonth)) {
+      p.prev.forms += 1;
+    }
   }
-  for (const dRow of monthRows) {
+  for (const dRow of (personDefects ?? []) as Row[]) {
     const name = ((dRow.opened_by_name as string | null) ?? '').trim();
     if (!name) continue;
-    const { p, d } = personDay(name, defectDate(dRow));
-    p.defects += 1;
-    d.defects += 1;
+    const date = (dRow.inspections?.inspection_date as string | null) ?? taipeiDate(dRow.created_at as string);
+    const stat = date.startsWith(month) ? 'cur' : date.startsWith(prevMonth) ? 'prev' : null;
+    if (!stat) continue;
+    const p = person(name);
+    p[stat].defects += 1;
+    if (
+      dRow.status === 'resolved' &&
+      dRow.resolved_at &&
+      dRow.due_date &&
+      taipeiDate(dRow.resolved_at as string) <= (dRow.due_date as string)
+    ) {
+      p[stat].onTime += 1;
+    }
+    if (stat === 'cur') {
+      if (!p.daily.has(date)) p.daily.set(date, { forms: 0, defects: 0 });
+      p.daily.get(date)!.defects += 1;
+    }
   }
   const personRows = [...personMap.entries()]
     .map(([name, p]) => ({
       name,
-      forms: p.forms,
-      defects: p.defects,
+      cur: p.cur,
+      prev: p.prev,
       daily: [...p.daily.entries()]
         .sort((a, b) => a[0].localeCompare(b[0]))
         .map(([date, v]) => ({ date, ...v })),
     }))
-    .sort((a, b) => b.forms - a.forms);
+    .sort((a, b) => b.cur.forms - a.cur.forms);
 
   // --- 該月：區域分佈（區域逐一拆開計數，Y 軸單一區域不重複）---
   const byArea = new Map<string, number>();
@@ -418,6 +453,18 @@ export default async function DashboardPage() {
                   })}
                 </tr>
               ))}
+              <tr>
+                <td className="whitespace-nowrap px-1 py-1.5 text-right text-xs font-bold text-foreground">總計</td>
+                {heatTotals.map((c, i) => (
+                  <td
+                    key={i}
+                    className="border-2 border-border px-0.5 py-1.5 font-bold"
+                    style={{ color: c > 0 ? 'var(--brand)' : 'var(--muted)', background: 'var(--brand-tint)' }}
+                  >
+                    {c}
+                  </td>
+                ))}
+              </tr>
             </tbody>
           </table>
         </div>
@@ -438,11 +485,17 @@ export default async function DashboardPage() {
         <p className="mt-2 text-center text-xs text-muted">柱內標示：①項次 次數（例：① 4＝第1項發生4次）</p>
       </section>
 
-      {/* 7. 人員統計（當月） */}
+      {/* 7. 人員統計（本月＋上月） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-        <h2 className="mb-3 text-base font-bold text-foreground">人員統計（{monthLabel} 月）</h2>
-        <PersonStats rows={personRows} />
-        <p className="mt-2 text-xs text-muted">開單＝開立表單次數；點人名展開每日明細</p>
+        <h2 className="mb-3 text-base font-bold text-foreground">人員統計</h2>
+        <PersonStats
+          rows={personRows}
+          monthLabel={`${monthLabel}月`}
+          prevMonthLabel={`${Number(prevMonth.slice(5))}月`}
+        />
+        <p className="mt-2 text-xs text-muted">
+          開單＝開立表單次數；如期結案＝該人開立的缺失於期限內結案；點人名展開本月每日明細
+        </p>
       </section>
     </div>
   );
