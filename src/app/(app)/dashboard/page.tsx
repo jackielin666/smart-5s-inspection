@@ -1,5 +1,6 @@
 import { createClient } from '@/infrastructure/supabase/server';
 import { taipeiToday } from '@/domain/date';
+import { workingDaysBetween } from '@/domain/workdays';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,20 +69,39 @@ function HBar({ name, count, max }: { name: string; count: number; max: number }
   );
 }
 
-/** 依表單大類的缺失數量直條圖 */
-function CategoryBars({ rows }: { rows: [string, number][] }) {
+/** 項次固定配色（1~29 各自穩定的顏色） */
+const itemColor = (no: number) => `hsl(${(no * 53) % 360} 52% 42%)`;
+
+/** 依表單大類的缺失數量「堆疊」直條圖：段＝項次，段內標項次序號 */
+function CategoryBars({
+  rows,
+}: {
+  rows: { section: string; total: number; items: [number, number][] }[];
+}) {
   if (rows.length === 0) return <p className="text-sm text-muted">（尚無缺失）</p>;
-  const max = Math.max(1, ...rows.map(([, c]) => c));
+  const max = Math.max(1, ...rows.map((r) => r.total));
+  const CHART_PX = 200; // 柱區高度（px），用來判斷段落是否夠高顯示序號
   return (
-    <div className="flex h-44 items-stretch justify-around gap-3 px-2">
-      {rows.map(([name, count]) => (
-        <div key={name} className="flex h-full max-w-24 flex-1 flex-col items-center justify-end">
-          <div className="text-xs font-bold" style={{ color: 'var(--brand)' }}>{count}</div>
-          <div
-            className="w-full rounded-t"
-            style={{ height: `${(count / max) * 75}%`, minHeight: 4, background: 'var(--brand)' }}
-          />
-          <div className="mt-1 break-all text-center text-[10px] leading-tight text-foreground">{name}</div>
+    <div className="flex items-end justify-around gap-3 px-2" style={{ height: CHART_PX + 44 }}>
+      {rows.map((r) => (
+        <div key={r.section} className="flex h-full max-w-28 flex-1 flex-col items-center justify-end">
+          <div className="text-xs font-bold" style={{ color: 'var(--brand)' }}>{r.total}</div>
+          <div className="flex w-full flex-col justify-end overflow-hidden rounded-t" style={{ height: (r.total / max) * CHART_PX }}>
+            {[...r.items].reverse().map(([no, count]) => {
+              const segPx = (count / max) * CHART_PX;
+              return (
+                <div
+                  key={no}
+                  className="flex w-full items-center justify-center text-[9px] font-bold leading-none text-white"
+                  style={{ height: segPx, background: itemColor(no) }}
+                  title={`第 ${no} 項：${count} 筆`}
+                >
+                  {segPx >= 11 ? no : ''}
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-1 break-all text-center text-[10px] leading-tight text-foreground">{r.section}</div>
         </div>
       ))}
     </div>
@@ -94,11 +114,11 @@ export default async function DashboardPage() {
   const year = today.slice(0, 4);
   const month = today.slice(0, 7);
 
-  const [{ data: yearDefects }, { data: allOpen }] = await Promise.all([
+  const [{ data: yearDefects }, { data: allOpen }, { data: holidayRows }] = await Promise.all([
     supabase
       .from('defects')
       .select(
-        'id, status, created_at, resolved_at, due_date, description, area_name, inspections(inspection_date), defect_units(responsible_units(name)), inspection_results(section_name_snapshot)',
+        'id, status, created_at, resolved_at, due_date, description, area_name, inspections(inspection_date), defect_units(responsible_units(name)), inspection_results(section_name_snapshot, item_no_snapshot)',
       )
       .is('deleted_at', null)
       .gte('created_at', `${year}-01-01T00:00:00+08:00`),
@@ -107,7 +127,10 @@ export default async function DashboardPage() {
       .select('id, due_date, status')
       .is('deleted_at', null)
       .neq('status', 'resolved'),
+    supabase.from('holidays').select('holiday_date'),
   ]);
+  // 標準處理天數＝5個工作日：所有天數統計一律跳過週六日與假日
+  const holidays = new Set<string>((holidayRows ?? []).map((h: Row) => h.holiday_date as string));
 
   const defectDate = (d: Row): string => d.inspections?.inspection_date ?? taipeiDate(d.created_at as string);
   const yearRows = (yearDefects ?? []) as Row[];
@@ -117,25 +140,21 @@ export default async function DashboardPage() {
   const mTotal = monthRows.length;
   const mResolved = monthRows.filter((d) => d.status === 'resolved');
   const mRate = mTotal > 0 ? `${Math.round((mResolved.length / mTotal) * 100)}%` : '—';
+  // 平均結案：開立日→結案日的「工作日」數
   const mAvgClose =
     mResolved.length > 0
       ? (
-          mResolved.reduce((s, d) => {
-            const open = new Date(d.created_at).getTime();
-            const close = d.resolved_at ? new Date(d.resolved_at).getTime() : open;
-            return s + Math.max(0, (close - open) / 86400000);
-          }, 0) / mResolved.length
+          mResolved.reduce(
+            (s, d) => s + workingDaysBetween(defectDate(d), d.resolved_at ? taipeiDate(d.resolved_at) : defectDate(d), holidays),
+            0,
+          ) / mResolved.length
         ).toFixed(1)
       : '—';
   const overdue = ((allOpen ?? []) as Row[]).filter((d) => d.due_date && d.due_date < today);
+  // 平均逾期：期限日→今日的「工作日」數
   const avgOverdueDays =
     overdue.length > 0
-      ? (
-          overdue.reduce(
-            (s, d) => s + (new Date(`${today}T00:00:00Z`).getTime() - new Date(`${d.due_date}T00:00:00Z`).getTime()) / 86400000,
-            0,
-          ) / overdue.length
-        ).toFixed(1)
+      ? (overdue.reduce((s, d) => s + workingDaysBetween(d.due_date, today, holidays), 0) / overdue.length).toFixed(1)
       : '—';
 
   // --- 年度：每月缺失數 ---
@@ -185,17 +204,28 @@ export default async function DashboardPage() {
   });
   const maxDaily = Math.max(1, ...dailyCounts.map((d) => d.count));
 
-  // --- 缺失數量統計（依表單 1~29 項的大類彙整）---
-  const sectionCounts = (rows: Row[]): [string, number][] => {
-    const m = new Map<string, number>();
+  // --- 缺失數量統計（依表單大類彙整，內部以項次 1~29 堆疊）---
+  const sectionStacks = (rows: Row[]) => {
+    const m = new Map<string, Map<number, number>>();
     for (const d of rows) {
       const sec = ((d.inspection_results?.section_name_snapshot as string | null) ?? '').trim() || '其他';
-      m.set(sec, (m.get(sec) ?? 0) + 1);
+      // 紙本項次 2~30 → 畫面項次 1~29
+      const rawNo = d.inspection_results?.item_no_snapshot as number | undefined;
+      const no = rawNo ? rawNo - 1 : 0;
+      if (!m.has(sec)) m.set(sec, new Map());
+      const inner = m.get(sec)!;
+      inner.set(no, (inner.get(no) ?? 0) + 1);
     }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]);
+    return [...m.entries()]
+      .map(([section, inner]) => ({
+        section,
+        total: [...inner.values()].reduce((a, b) => a + b, 0),
+        items: [...inner.entries()].sort((a, b) => a[0] - b[0]) as [number, number][],
+      }))
+      .sort((a, b) => b.total - a.total);
   };
-  const monthSections = sectionCounts(monthRows);
-  const yearSections = sectionCounts(yearRows);
+  const monthSections = sectionStacks(monthRows);
+  const yearSections = sectionStacks(yearRows);
 
   const monthLabel = Number(month.slice(5));
 
@@ -290,12 +320,14 @@ export default async function DashboardPage() {
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-foreground">當月缺失數量統計（{monthLabel} 月，依大類）</h2>
         <CategoryBars rows={monthSections} />
+        <p className="mt-2 text-center text-xs text-muted">柱內數字＝檢查表項次（1~29）</p>
       </section>
 
       {/* 6. 年度缺失數量統計（大類） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-foreground">年度缺失數量統計（{year}，依大類）</h2>
         <CategoryBars rows={yearSections} />
+        <p className="mt-2 text-center text-xs text-muted">柱內數字＝檢查表項次（1~29）</p>
       </section>
     </div>
   );

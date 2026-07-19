@@ -62,7 +62,8 @@ export function HistoryClient({ days }: { days: HistoryDayRow[] }) {
         <div className="space-y-2.5">
           {filtered.map((d) => {
             const opened = openDate === d.date;
-            const allSubmitted = d.forms.every((f) => f.status === 'completed');
+            const doneCount = d.forms.filter((f) => f.status === 'completed').length;
+            const undoneCount = d.forms.length - doneCount;
             return (
               <div key={d.date} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                 <button
@@ -71,11 +72,23 @@ export function HistoryClient({ days }: { days: HistoryDayRow[] }) {
                 >
                   <div className="flex items-center justify-between">
                     <div className="font-bold text-foreground">{formatFriendlyDate(d.date)}</div>
-                    <span
-                      className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
-                      style={{ background: allSubmitted ? 'var(--pass)' : 'var(--pending)' }}
-                    >
-                      {allSubmitted ? '已完成' : '有未送出表單'}
+                    <span className="flex gap-1.5">
+                      {doneCount > 0 && (
+                        <span
+                          className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+                          style={{ background: 'var(--pass)' }}
+                        >
+                          已完成 {doneCount} 份
+                        </span>
+                      )}
+                      {undoneCount > 0 && (
+                        <span
+                          className="rounded-md px-2 py-0.5 text-xs font-semibold text-white"
+                          style={{ background: 'var(--pending)' }}
+                        >
+                          未送出 {undoneCount} 份
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted">

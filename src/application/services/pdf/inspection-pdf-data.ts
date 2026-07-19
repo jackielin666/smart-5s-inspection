@@ -131,30 +131,20 @@ function groupNotesByDate(defects: PdfDefect[]): { date: string; items: PdfDefec
 /** timestamp → 台北時區日期字串 */
 const toTaipeiDate = (ts: string) => new Date(new Date(ts).getTime() + 8 * 3600e3).toISOString().slice(0, 10);
 
-/** 改善記錄：只列「報告當日結案」的缺失，編號沿用狀況說明該日期組內序號 */
-function toImprovements(
-  groups: { date: string; items: PdfDefect[] }[],
-  reportDate: string,
-): InspectionPdfData['improvements'] {
-  const out: InspectionPdfData['improvements'] = [];
-  for (const g of groups) {
-    g.items.forEach((d, i) => {
-      if (d.status !== 'resolved' || !d.resolvedAt) return;
-      const resolvedDate = toTaipeiDate(d.resolvedAt);
-      if (resolvedDate !== reportDate) return; // 只顯示當日改善的項目
-      out.push({
-        seq: i + 1,
-        date: d.inspectionDate,
-        resolvedDate,
-        description: d.description,
-        unitNames: d.unitNames,
-        areaName: d.areaName,
-        before: d.photos.filter((p) => p.kind === 'before'),
-        after: d.photos.filter((p) => p.kind === 'after'),
-      });
-    });
-  }
-  return out;
+/** 改善記錄：只列「報告當日結案」的缺失，獨立流水編號（狀況說明不再列已結案項） */
+function toImprovements(defects: PdfDefect[], reportDate: string): InspectionPdfData['improvements'] {
+  return defects
+    .filter((d) => d.status === 'resolved' && d.resolvedAt && toTaipeiDate(d.resolvedAt) === reportDate)
+    .map((d, i) => ({
+      seq: i + 1,
+      date: d.inspectionDate,
+      resolvedDate: toTaipeiDate(d.resolvedAt!),
+      description: d.description,
+      unitNames: d.unitNames,
+      areaName: d.areaName,
+      before: d.photos.filter((p) => p.kind === 'before'),
+      after: d.photos.filter((p) => p.kind === 'after'),
+    }));
 }
 
 /** 組裝單次巡檢 PDF 所需資料（含未結案舊缺失往前帶） */
@@ -233,8 +223,9 @@ export async function buildInspectionPdfData(
     legend: '檢驗結果填寫：合格 V、不合格 X、待處理△、復驗 O',
     inspectors: inspectorNames,
     sections,
-    notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(groupNotesByDate(all), inspDate),
+    // 狀況說明只列「仍未結案」項目（已結案改列改善記錄頁）
+    notesByDate: groupNotesByDate(all.filter((d) => d.status !== 'resolved')),
+    improvements: toImprovements(all, inspDate),
   };
 }
 
@@ -322,7 +313,8 @@ export async function buildDailyPdfData(
     completionNote: `完成 ${doneCount}/${byItem.size} 項`,
     inspectors,
     sections,
-    notesByDate: groupNotesByDate(all),
-    improvements: toImprovements(groupNotesByDate(all), date),
+    // 狀況說明只列「仍未結案」項目（已結案改列改善記錄頁）
+    notesByDate: groupNotesByDate(all.filter((d) => d.status !== 'resolved')),
+    improvements: toImprovements(all, date),
   };
 }
