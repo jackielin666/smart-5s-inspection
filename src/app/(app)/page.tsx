@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/infrastructure/supabase/server';
+import { isAdminEmail } from '@/infrastructure/auth/admin';
 import { taipeiToday } from '@/domain/date';
 import { TodayReportButton } from './_components/today-report-button';
 
@@ -7,6 +8,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isAdmin = isAdminEmail(user?.email);
   const today = taipeiToday();
   const monthStart = `${today.slice(0, 7)}-01`;
 
@@ -99,6 +104,23 @@ export default async function DashboardPage() {
           <path d="m9 18 6-6-6-6" />
         </svg>
       </Link>
+
+      {isAdmin && (
+        <Link
+          href="/annual"
+          className="flex items-center gap-3 rounded-2xl border-2 bg-surface p-4 shadow-sm active:scale-[0.99]"
+          style={{ borderColor: 'var(--brand)' }}
+        >
+          <span className="text-xl">📈</span>
+          <div className="flex-1">
+            <div className="font-bold" style={{ color: 'var(--brand)' }}>年度異常分析（管理者）</div>
+            <div className="text-sm text-muted">柏拉圖 / 重複發生 / 交叉分析 / CSV 匯出</div>
+          </div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </Link>
+      )}
 
       <Link
         href="/settings"

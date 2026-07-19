@@ -1,6 +1,7 @@
 import { createClient } from '@/infrastructure/supabase/server';
 import { taipeiToday } from '@/domain/date';
 import { workingDaysBetween } from '@/domain/workdays';
+import { PersonStats } from './_components/person-stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -122,21 +123,29 @@ export default async function DashboardPage() {
   const year = today.slice(0, 4);
   const month = today.slice(0, 7);
 
-  const [{ data: yearDefects }, { data: allOpen }, { data: holidayRows }] = await Promise.all([
-    supabase
-      .from('defects')
-      .select(
-        'id, status, created_at, resolved_at, due_date, description, area_name, inspections(inspection_date), defect_units(responsible_units(name)), inspection_results(section_name_snapshot, item_no_snapshot)',
-      )
-      .is('deleted_at', null)
-      .gte('created_at', `${year}-01-01T00:00:00+08:00`),
-    supabase
-      .from('defects')
-      .select('id, due_date, status')
-      .is('deleted_at', null)
-      .neq('status', 'resolved'),
-    supabase.from('holidays').select('holiday_date'),
-  ]);
+  const [{ data: yearDefects }, { data: allOpen }, { data: holidayRows }, { data: unitRows0 }, { data: monthForms }] =
+    await Promise.all([
+      supabase
+        .from('defects')
+        .select(
+          'id, status, created_at, resolved_at, due_date, description, area_name, opened_by_name, inspections(inspection_date), defect_units(responsible_units(name)), inspection_results(section_name_snapshot, item_no_snapshot)',
+        )
+        .is('deleted_at', null)
+        .gte('created_at', `${year}-01-01T00:00:00+08:00`),
+      supabase
+        .from('defects')
+        .select('id, due_date, status')
+        .is('deleted_at', null)
+        .neq('status', 'resolved'),
+      supabase.from('holidays').select('holiday_date'),
+      supabase.from('responsible_units').select('name').eq('is_active', true).order('sort_order'),
+      supabase
+        .from('inspections')
+        .select('filled_by_name, inspection_date')
+        .is('deleted_at', null)
+        .gte('inspection_date', `${month}-01`),
+    ]);
+  const allUnitNames = (unitRows0 ?? []).map((u: Row) => u.name as string);
   // 標準處理天數＝5個工作日：所有天數統計一律跳過週六日與假日
   const holidays = new Set<string>((holidayRows ?? []).map((h: Row) => h.holiday_date as string));
 
@@ -190,8 +199,59 @@ export default async function DashboardPage() {
       if (name) byUnit.set(name, (byUnit.get(name) ?? 0) + 1);
     }
   }
-  const unitRows = [...byUnit.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  // 列出所有啟用班別，沒有缺失的標 0
+  const unitRows: [string, number][] = allUnitNames
+    .map((name): [string, number] => [name, byUnit.get(name) ?? 0])
+    .sort((a, b) => b[1] - a[1]);
+  for (const [name, c] of byUnit) if (!allUnitNames.includes(name)) unitRows.push([name, c]);
   const maxUnit = Math.max(1, ...unitRows.map(([, c]) => c));
+
+  // --- 班別 × 月份 熱力圖（全年）---
+  const unitMonth = new Map<string, number[]>();
+  for (const name of allUnitNames) unitMonth.set(name, Array(12).fill(0));
+  for (const d of yearRows) {
+    const mi = Number(defectDate(d).slice(5, 7)) - 1;
+    for (const u of d.defect_units ?? []) {
+      const name = u.responsible_units?.name;
+      if (!name) continue;
+      if (!unitMonth.has(name)) unitMonth.set(name, Array(12).fill(0));
+      unitMonth.get(name)![mi] += 1;
+    }
+  }
+  const heatMax = Math.max(1, ...[...unitMonth.values()].flat());
+
+  // --- 人員統計（當月）：開單次數＋開立缺失數＋每日明細 ---
+  const personMap = new Map<string, { forms: number; defects: number; daily: Map<string, { forms: number; defects: number }> }>();
+  const personDay = (name: string, date: string) => {
+    if (!personMap.has(name)) personMap.set(name, { forms: 0, defects: 0, daily: new Map() });
+    const p = personMap.get(name)!;
+    if (!p.daily.has(date)) p.daily.set(date, { forms: 0, defects: 0 });
+    return { p, d: p.daily.get(date)! };
+  };
+  for (const f of (monthForms ?? []) as Row[]) {
+    const name = (f.filled_by_name as string | null)?.trim();
+    if (!name) continue;
+    const { p, d } = personDay(name, f.inspection_date as string);
+    p.forms += 1;
+    d.forms += 1;
+  }
+  for (const dRow of monthRows) {
+    const name = ((dRow.opened_by_name as string | null) ?? '').trim();
+    if (!name) continue;
+    const { p, d } = personDay(name, defectDate(dRow));
+    p.defects += 1;
+    d.defects += 1;
+  }
+  const personRows = [...personMap.entries()]
+    .map(([name, p]) => ({
+      name,
+      forms: p.forms,
+      defects: p.defects,
+      daily: [...p.daily.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, v]) => ({ date, ...v })),
+    }))
+    .sort((a, b) => b.forms - a.forms);
 
   // --- 該月：區域分佈（區域逐一拆開計數，Y 軸單一區域不重複）---
   const byArea = new Map<string, number>();
@@ -324,6 +384,46 @@ export default async function DashboardPage() {
         <p className="mt-2 text-xs text-muted">同一筆缺失若涉及多個區域，各區域分別計 1 次</p>
       </section>
 
+      {/* 4.5 班別 × 月份 熱力圖（全年，看季節相關性） */}
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-foreground">班別 × 月份 缺失熱力圖（{year}）</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-center text-[11px]">
+            <thead>
+              <tr>
+                <th className="min-w-20 px-1 py-1 text-right text-muted">班別＼月</th>
+                {Array.from({ length: 12 }, (_, i) => (
+                  <th key={i} className="min-w-7 px-0.5 py-1 font-semibold text-muted">{i + 1}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {[...unitMonth.entries()].map(([name, counts]) => (
+                <tr key={name}>
+                  <td className="whitespace-nowrap px-1 py-0.5 text-right text-xs font-medium text-foreground">{name}</td>
+                  {counts.map((c, i) => {
+                    const alpha = c === 0 ? 0 : 0.15 + 0.75 * (c / heatMax);
+                    return (
+                      <td
+                        key={i}
+                        className="border border-border px-0.5 py-1.5 font-bold"
+                        style={{
+                          background: c === 0 ? 'transparent' : `rgba(122, 26, 29, ${alpha})`,
+                          color: alpha > 0.45 ? 'white' : c === 0 ? 'var(--muted)' : 'var(--foreground)',
+                        }}
+                      >
+                        {c}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-muted">顏色越深＝該班該月缺失越多，可觀察季節相關性</p>
+      </section>
+
       {/* 5. 當月缺失數量統計（大類） */}
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-3 text-base font-bold text-foreground">當月缺失數量統計（{monthLabel} 月，依大類）</h2>
@@ -336,6 +436,13 @@ export default async function DashboardPage() {
         <h2 className="mb-3 text-base font-bold text-foreground">年度缺失數量統計（{year}，依大類）</h2>
         <CategoryBars rows={yearSections} />
         <p className="mt-2 text-center text-xs text-muted">柱內標示：①項次 次數（例：① 4＝第1項發生4次）</p>
+      </section>
+
+      {/* 7. 人員統計（當月） */}
+      <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+        <h2 className="mb-3 text-base font-bold text-foreground">人員統計（{monthLabel} 月）</h2>
+        <PersonStats rows={personRows} />
+        <p className="mt-2 text-xs text-muted">開單＝開立表單次數；點人名展開每日明細</p>
       </section>
     </div>
   );
