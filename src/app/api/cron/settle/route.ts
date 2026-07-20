@@ -53,7 +53,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const date = taipeiToday();
+  // force 可指定日期（補產/補備份任一天，測試用）；一般排程一律結算今日
+  const dateParam = req.nextUrl.searchParams.get('date');
+  const date = force && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : taipeiToday();
   const cfg = await getReportConfig(db);
 
   // 時間/日期閘門（force 略過）
