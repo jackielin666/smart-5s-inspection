@@ -23,8 +23,9 @@ export async function backupDayToDrive(
   date: string,
   pdf: Buffer | null,
 ): Promise<BackupResult> {
-  if (!process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    return { ok: false, pdf: false, photos: 0, photosSkipped: 0, error: '未設定 GOOGLE_SERVICE_ACCOUNT_KEY，略過備份' };
+  // 預設關閉（服務帳號無法寫入個人 Drive）；改用 OAuth 後設 ENABLE_GDRIVE_BACKUP=1 啟用
+  if (process.env.ENABLE_GDRIVE_BACKUP !== '1' || !process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    return { ok: false, pdf: false, photos: 0, photosSkipped: 0, error: 'Drive 備份未啟用（改用 App 內 ZIP 下載）' };
   }
   const drive = new GoogleDriveStorageProvider();
   const supaStorage = new SupabaseStorageProvider(db);

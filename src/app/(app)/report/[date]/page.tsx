@@ -22,16 +22,26 @@ export default async function ReportViewerPage({
           ← 回首頁
         </Link>
         <span className="text-sm font-bold text-foreground">{date} 檢查日報</span>
-        {/* target=_blank：手機 App 模式會以覆蓋視窗開啟（有完成鈕可返回），不會卡住 */}
-        <a
-          href={pdfUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-xl border border-border bg-surface px-4 py-2 text-sm font-bold shadow-sm"
-          style={{ color: 'var(--brand)' }}
-        >
-          開啟 PDF
-        </a>
+        <div className="flex gap-2">
+          {/* 下載當日照片 ZIP：QC 存到部門電腦 */}
+          <a
+            href={`/api/reports/${date}/photos`}
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold shadow-sm"
+            style={{ color: 'var(--brand)' }}
+          >
+            ⬇ 照片ZIP
+          </a>
+          {/* target=_blank：手機 App 模式會以覆蓋視窗開啟（有完成鈕可返回），不會卡住 */}
+          <a
+            href={pdfUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-border bg-surface px-3 py-2 text-sm font-bold shadow-sm"
+            style={{ color: 'var(--brand)' }}
+          >
+            開啟 PDF
+          </a>
+        </div>
       </div>
       {valid ? <PdfPreview url={pdfUrl} /> : <p className="text-sm text-muted">日期格式錯誤</p>}
     </div>
