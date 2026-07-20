@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>五惠 5S 巡檢系統 · QC 操作說明</title>
+<style>
+  :root {
+    --paper: #faf7f5; --surface: #ffffff; --ink: #241b1b; --muted: #6d5f5f;
+    --line: #ece0dd; --brand: #7a1a1d; --brand-dark: #5e1417; --tint: #f4e9e9;
+    --pass: #2e7d46; --pass-bg: #e7f2ea; --fail: #c0392b; --fail-bg: #fbe9e7;
+    --pending: #b9770c; --pending-bg: #fbf0dc;
+    --shadow: 0 1px 2px rgba(60,20,20,.06), 0 6px 20px rgba(60,20,20,.05);
+    --cjk: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", ui-sans-serif, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1a1514; --surface: #241d1c; --ink: #f0e8e6; --muted: #b3a4a1;
+      --line: #3a2e2c; --brand: #e8a0a2; --brand-dark: #f0b8ba; --tint: #33211f;
+      --pass: #6cc98a; --pass-bg: #1e3126; --fail: #f0917f; --fail-bg: #3a2320;
+      --pending: #e0b467; --pending-bg: #352a17;
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.25);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--cjk); line-height: 1.7; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 60px; }
+  .mast {
+    background: linear-gradient(135deg, var(--brand-dark), var(--brand));
+    color: #fff; border-radius: 20px; padding: 26px 28px;
+    display: flex; align-items: center; gap: 20px; box-shadow: var(--shadow);
+  }
+  .badge5s {
+    width: 62px; height: 62px; flex: none; border-radius: 16px;
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.3);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-weight: 800; line-height: 1;
+  }
+  .badge5s b { font-size: 20px; } .badge5s span { font-size: 10px; margin-top: 3px; letter-spacing: .5px; opacity: .9; }
+  .mast h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: .5px; }
+  .mast p { margin: 4px 0 0; font-size: 13.5px; opacity: .92; }
+  .kicker {
+    display: inline-block; margin: 30px 0 10px; padding: 3px 12px;
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    color: var(--brand); background: var(--tint); border-radius: 999px;
+  }
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px 20px; box-shadow: var(--shadow); display: flex; gap: 16px; break-inside: avoid;
+  }
+  .num {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--brand); color: #fff; font-weight: 800; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums;
+  }
+  @media (prefers-color-scheme: dark) { .num { color: #241d1c; } }
+  .step-body { flex: 1; min-width: 0; }
+  .step-body h3 { margin: 3px 0 6px; font-size: 17px; font-weight: 800; text-wrap: balance; }
+  .step-body p { margin: 0 0 6px; font-size: 14.5px; }
+  .step-body ul { margin: 6px 0 0; padding-left: 18px; }
+  .step-body li { font-size: 14px; margin-bottom: 4px; }
+  .muted { color: var(--muted); }
+  .pill { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 700; vertical-align: middle; }
+  .pill.pass { color: var(--pass); background: var(--pass-bg); }
+  .pill.fail { color: var(--fail); background: var(--fail-bg); }
+  .pill.brand { color: var(--brand); background: var(--tint); }
+  .must { margin-top: 8px; padding: 10px 12px; border-left: 3px solid var(--fail); background: var(--fail-bg); border-radius: 8px; font-size: 13.5px; }
+  .must b { color: var(--fail); }
+  .rules { margin-top: 16px; background: var(--surface); border: 2px solid var(--brand); border-radius: 16px; padding: 20px 22px; box-shadow: var(--shadow); break-inside: avoid; }
+  .rules h2 { margin: 0 0 12px; font-size: 18px; color: var(--brand); font-weight: 800; }
+  .rules-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px; }
+  @media (max-width: 560px) { .rules-grid { grid-template-columns: 1fr; } }
+  .rule { display: flex; gap: 10px; font-size: 14px; align-items: flex-start; }
+  .rule .dot { color: var(--brand); font-weight: 800; flex: none; }
+  footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  @media print {
+    :root { --paper: #fff; --surface: #fff; --shadow: none; }
+    body { color: #000; } .wrap { padding: 0; max-width: 100%; }
+    .mast { background: var(--brand) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .step, .rules { box-shadow: none; }
+    .kicker { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="mast">
+    <div class="badge5s"><b>五惠</b><span>5S</span></div>
+    <div>
+      <h1>智慧環境 5S 巡檢系統 · 操作說明</h1>
+      <p>品保部門每日環境巡檢 SOP　—　給檢查人員（QC）現場參照</p>
+    </div>
+  </header>
+
+  <div class="kicker">登入與開始</div>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <div class="step-body">
+        <h3>登入系統</h3>
+        <p>用平板／手機的瀏覽器開啟系統網址，第一次使用請按「加入主畫面」，桌面就會出現<span class="pill brand">五惠</span>圖示，之後點圖示直接進入。</p>
+        <ul>
+          <li>帳號：<b>qc@wuhui.com.tw</b>（品保共用）</li>
+          <li>閒置超過 <b>15 分鐘</b>會自動登出，重新登入即可繼續。</li>
+        </ul>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <div class="step-body">
+        <h3>開始今日巡檢</h3>
+        <p>首頁按「<b>開始今日巡檢</b>」→「<b>＋ 開新表單</b>」→ 先<b>選填表人</b>（點自己的名字，必選）→ 開始檢查。</p>
+        <p class="muted">同一天可以有多張表單：不同人各巡各的、或同一人早晚各巡一次都可以，各自開一張。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="kicker">逐項檢查與開立缺失</div>
+  <div class="steps">
+    <div class="step">
+      <div class="num">3</div>
+      <div class="step-body">
+        <h3>逐項判定（共 29 項）</h3>
+        <p>每一項依現場狀況點選 <span class="pill pass">合格</span> 或 <span class="pill fail">不合格</span>。系統會自動儲存，不用另外按存檔。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <div class="step-body">
+        <h3>判「不合格」→ 開立缺失</h3>
+        <p>判不合格會自動展開缺失欄位，請填寫：</p>
+        <ul>
+          <li><b>缺失說明</b>：簡述問題（例：庫板矽利康剝落）</li>
+          <li><b>權責班別</b>：哪個單位負責（可複選、可跨部門）</li>
+          <li><b>發生區域</b>：在哪裡發生</li>
+          <li><b>改善建議</b>：建議怎麼處理</li>
+        </ul>
+        <div class="must"><b>一定要拍「改善前」照片。</b>拍照或選相簿後，可用手指在照片上<b>畫紅圈</b>標出缺失位置，再上傳。沒拍照無法送出。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">5</div>
+      <div class="step-body">
+        <h3>送出今日紀錄</h3>
+        <p>全部檢查完，按「<b>送出此表單</b>」。若有漏填（未判定、缺說明、缺班別、缺照片），系統會<b>列出是第幾項</b>擋下來，補齊才能送出。</p>
+        <p class="muted">送出後表單<b>鎖定、不可再修改</b>，請確認後再送。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="kicker">缺失改善與複檢結案</div>
+  <div class="steps">
+    <div class="step">
+      <div class="num">6</div>
+      <div class="step-body">
+        <h3>缺失改善後回報（未改善頁）</h3>
+        <p>底部「<b>未改善</b>」頁會列出待處理缺失。改善完成後，點該筆缺失：</p>
+        <ul>
+          <li>狀態選 <span class="pill pass">已改善</span></li>
+          <li>拍「<b>改善後</b>」照片（會和改善前照片並排比對）</li>
+          <li>點選<b>確認人員</b>，按「送出並標記已改善」</li>
+        </ul>
+        <div class="must">每筆缺失須在 <b>5 個工作日內</b>改善結案（不含週末與國定假日）。</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">7</div>
+      <div class="step-body">
+        <h3>查看報告與下載照片</h3>
+        <p>首頁「<b>檢視當日報告 PDF</b>」可看／列印當天彙整報告。報告頁右上「<span class="pill brand">⬇ 照片ZIP</span>」可把當天所有照片打包下載，<b>存到部門電腦</b>存檔。歷史頁可查任一天並下載。</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">8</div>
+      <div class="step-body">
+        <h3>操作問題或建議 → 意見反饋</h3>
+        <p>首頁「<b>意見反饋</b>」：操作遇到異常選<span class="pill fail">操作異常</span>、有想法選<span class="pill brand">意見建議</span>，寫下來送出即可，會列入系統改版參考。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules">
+    <h2>重要規則（務必遵守）</h2>
+    <div class="rules-grid">
+      <div class="rule"><span class="dot">◆</span><div><b>判定異常一定要拍照</b>，沒有改善前照片無法送出。</div></div>
+      <div class="rule"><span class="dot">◆</span><div>缺失須在 <b>5 個工作日內</b>改善結案。</div></div>
+      <div class="rule"><span class="dot">◆</span><div>每天 <b>16:30 自動結算</b>：鎖定當日表單、產生日報並寄出。</div></div>
+      <div class="rule"><span class="dot">◆</span><div>沒送出的表單<b>過了當天就鎖定</b>，不可再補改。</div></div>
+      <div class="rule"><span class="dot">◆</span><div>結案「已改善」前，<b>改善後照片必拍</b>、要選確認人員。</div></div>
+      <div class="rule"><span class="dot">◆</span><div>閒置 <b>15 分鐘自動登出</b>，重新登入即可續填。</div></div>
+    </div>
+  </div>
+
+  <footer>
+    <span>五惠食品廠股份有限公司 · 品保部門　|　表單編號 S12501F</span>
+    <span>操作有疑問請用系統「意見反饋」記錄</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -88,6 +88,16 @@ function LoginForm() {
             {loading ? '登入中…' : '登入'}
           </button>
         </form>
+
+        <a
+          href="/qc-manual.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-6 block text-center text-sm font-medium"
+          style={{ color: 'var(--brand)' }}
+        >
+          📋 操作說明（QC 參照）
+        </a>
       </div>
     </main>
   );
