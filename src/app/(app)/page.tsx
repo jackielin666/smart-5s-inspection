@@ -90,18 +90,23 @@ export default async function DashboardPage() {
         allSubmitted={todayForms.length > 0 && todayForms.every((f) => f.status === 'completed')}
       />
 
-      <div className="grid grid-cols-2 gap-3">
-        <FeatureCard href="/dashboard" icon="📊" title="統計圖表" />
-        <FeatureCard href="/settings" icon="⚙️" title="設定管理" />
-        {isAdmin && <FeatureCard href="/annual" icon="📈" title="年度異常分析" admin />}
-        <FeatureCard href="/feedback" icon="📝" title="意見反饋" />
-      </div>
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-semibold tracking-wide text-muted">報告與分析</h2>
+        <FeatureRow href="/dashboard" icon="📊" title="統計圖表" />
+        {isAdmin && <FeatureRow href="/annual" icon="📈" title="年度異常分析" admin />}
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="px-1 text-xs font-semibold tracking-wide text-muted">系統設定</h2>
+        <FeatureRow href="/settings" icon="⚙️" title="設定管理" />
+        <FeatureRow href="/feedback" icon="📝" title="意見反饋" />
+      </section>
     </div>
   );
 }
 
-/** 首頁功能小卡（2欄緊湊排版） */
-function FeatureCard({
+/** 首頁功能整列清單（分組用）：圖示 + 標題 + 箭頭 */
+function FeatureRow({
   href,
   icon,
   title,
@@ -115,16 +120,15 @@ function FeatureCard({
   return (
     <Link
       href={href}
-      className={`flex items-center justify-center gap-2.5 rounded-2xl bg-surface px-3 py-5 shadow-sm active:scale-[0.99] ${admin ? 'border-2' : 'border border-border'}`}
-      style={admin ? { borderColor: 'var(--brand)' } : undefined}
+      className="flex items-center gap-3 rounded-2xl border border-border bg-surface px-4 py-4 shadow-sm active:scale-[0.99]"
     >
-      <span className="text-2xl">{icon}</span>
-      <span
-        className="whitespace-nowrap text-[15px] font-bold"
-        style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}
-      >
+      <span className="text-xl">{icon}</span>
+      <span className="flex-1 text-[15px] font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
         {title}
       </span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m9 18 6-6-6-6" />
+      </svg>
     </Link>
   );
 }
