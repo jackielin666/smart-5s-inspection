@@ -1,0 +1,16 @@
+name: 每日結算輪詢
+
+# 下午時段每 30 分鐘敲一次結算端點；實際是否結算由系統依「設定的結算時間」判斷。
+# UTC 05:00–12:00 = 台北 13:00–20:00，涵蓋可設定的結算時間範圍。
+on:
+  schedule:
+    - cron: '0,30 5-11 * * *'
+  workflow_dispatch: {} # 允許手動觸發
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 呼叫結算端點
+        run: |
+          curl -sS -m 90 "https://smart-5s-inspection.vercel.app/api/cron/settle" || true

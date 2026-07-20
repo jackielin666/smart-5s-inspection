@@ -97,6 +97,38 @@ export class GoogleDriveStorageProvider implements StorageProvider {
     return { key, url: `/api/photos/raw/${key}` };
   }
 
+  /** 同名檔案已存在則跳過（備份用，可重複執行不產生重複檔） */
+  async uploadOnce(params: UploadParams): Promise<StorageFile & { skipped: boolean }> {
+    const drive = getDrive();
+    const parts = params.path.split('/').filter(Boolean);
+    const filename = parts.pop() ?? `file-${Date.now()}`;
+    const parentId = await ensureNestedPath(drive, this.rootFolderId, [
+      FOLDER_LABEL[params.folder],
+      ...parts,
+    ]);
+    const safe = filename.replace(/'/g, "\\'");
+    const existing = await drive.files.list({
+      q: `'${parentId}' in parents and name='${safe}' and trashed=false`,
+      fields: 'files(id)',
+      spaces: 'drive',
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    if (existing.data.files && existing.data.files.length > 0) {
+      return { key: existing.data.files[0].id!, url: `/api/photos/raw/${existing.data.files[0].id}`, skipped: true };
+    }
+    const buffer = Buffer.isBuffer(params.content)
+      ? params.content
+      : Buffer.from(await (params.content as Blob).arrayBuffer());
+    const res = await drive.files.create({
+      requestBody: { name: filename, parents: [parentId] },
+      media: { mimeType: params.contentType, body: Readable.from(buffer) },
+      fields: 'id',
+      supportsAllDrives: true,
+    });
+    return { key: res.data.id!, url: `/api/photos/raw/${res.data.id}`, skipped: false };
+  }
+
   async getUrl(key: string): Promise<string> {
     return `/api/photos/raw/${key}`;
   }

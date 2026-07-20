@@ -14,17 +14,21 @@ export interface SendResult {
 export async function sendReportEmail(params: {
   subject: string;
   html: string;
+  to?: string[]; // 收件人（優先於環境變數；預設測試信箱）
   attachment?: { filename: string; content: Buffer };
 }): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, skipped: true, error: 'RESEND_API_KEY 未設定，略過寄信' };
 
-  const to = process.env.REPORT_EMAIL_TO ?? 'jackielin666@gmail.com';
+  const to =
+    params.to && params.to.length > 0
+      ? params.to
+      : [process.env.REPORT_EMAIL_TO ?? 'jackielin666@gmail.com'];
   const from = process.env.REPORT_EMAIL_FROM ?? '5S巡檢系統 <onboarding@resend.dev>';
 
   const body: Record<string, unknown> = {
     from,
-    to: [to],
+    to,
     subject: params.subject,
     html: params.html,
   };

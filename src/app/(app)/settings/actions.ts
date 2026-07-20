@@ -87,3 +87,32 @@ export async function setUnitAreaActiveAction(id: string, isActive: boolean): Pr
     return { ok: false };
   }
 }
+
+/** 儲存報告寄送設定（結算時間＋收件人，僅管理者） */
+export async function saveReportConfigAction(
+  settleTime: string,
+  reportEmails: string[],
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { createClient } = await import('@/infrastructure/supabase/server');
+    const { isAdminEmail } = await import('@/infrastructure/auth/admin');
+    const { saveReportConfig } = await import('@/application/services/app-config');
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!isAdminEmail(user?.email)) return { ok: false, error: '僅管理者可修改' };
+
+    // 時間限 13:00–19:30（GitHub Actions 輪詢涵蓋範圍）
+    if (!/^\d{2}:\d{2}$/.test(settleTime) || settleTime < '13:00' || settleTime > '19:30') {
+      return { ok: false, error: '結算時間請設在 13:00–19:30 之間' };
+    }
+    const emails = reportEmails.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+    if (emails.length === 0) return { ok: false, error: '請至少填一個有效 Email' };
+
+    await saveReportConfig(supabase, { settleTime, reportEmails: [...new Set(emails)] });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: '儲存失敗' };
+  }
+}
