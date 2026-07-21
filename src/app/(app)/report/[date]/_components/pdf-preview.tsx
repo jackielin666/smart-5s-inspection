@@ -55,20 +55,22 @@ export function PdfPreview({ url }: { url: string }) {
         <p className="py-6 text-center text-sm text-muted">報告產生中…{pageInfo}</p>
       )}
       {status === 'error' && (
-        <div className="py-10 text-center">
-          <p className="mb-4 text-sm text-muted">此裝置無法內嵌預覽，請直接開啟報告：</p>
+        <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+          <div className="mb-2 text-4xl">📄</div>
+          <p className="mb-1 text-base font-bold text-foreground">當日報告已產生</p>
+          <p className="mb-5 text-sm text-muted">iPad／手機請點下方開啟，內建檢視器可看全部頁面</p>
           <a
             href={url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-block rounded-xl px-6 py-3 text-base font-bold text-white shadow-sm active:scale-[0.98]"
+            className="inline-block rounded-xl px-7 py-3.5 text-base font-bold text-white shadow-sm active:scale-[0.98]"
             style={{ background: 'var(--brand)' }}
           >
             開啟完整報告 PDF
           </a>
         </div>
       )}
-      <div ref={containerRef} />
+      <div ref={containerRef} style={{ display: status === 'ok' ? 'block' : 'none' }} />
     </div>
   );
 }
