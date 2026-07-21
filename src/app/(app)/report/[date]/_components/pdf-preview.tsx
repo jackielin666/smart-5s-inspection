@@ -27,7 +27,9 @@ export function PdfPreview({ url }: { url: string }) {
           if (cancelled) return;
           const page = await doc.getPage(i);
           const base = page.getViewport({ scale: 1 });
-          const scale = (width / base.width) * Math.min(2, window.devicePixelRatio || 1);
+          // 2 倍超取樣渲染（顯示寬度縮回），文字更銳利清楚
+          const quality = Math.min(3, (window.devicePixelRatio || 1) * 2);
+          const scale = (width / base.width) * quality;
           const viewport = page.getViewport({ scale });
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
