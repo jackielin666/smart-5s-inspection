@@ -16,10 +16,8 @@ export function PdfPreview({ url }: { url: string }) {
     (async () => {
       try {
         const pdfjs = await import('pdfjs-dist');
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          'pdfjs-dist/build/pdf.worker.min.mjs',
-          import.meta.url,
-        ).toString();
+        // 從 public 提供 worker（比 import.meta.url 在 iOS Safari / 正式環境更穩定）
+        pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
         const doc = await pdfjs.getDocument({ url }).promise;
         const container = containerRef.current;
         if (!container || cancelled) return;
@@ -57,9 +55,18 @@ export function PdfPreview({ url }: { url: string }) {
         <p className="py-6 text-center text-sm text-muted">報告產生中…{pageInfo}</p>
       )}
       {status === 'error' && (
-        <p className="py-6 text-center text-sm text-fail">
-          預覽載入失敗，請按右上「開啟」直接檢視 PDF
-        </p>
+        <div className="py-10 text-center">
+          <p className="mb-4 text-sm text-muted">此裝置無法內嵌預覽，請直接開啟報告：</p>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-xl px-6 py-3 text-base font-bold text-white shadow-sm active:scale-[0.98]"
+            style={{ background: 'var(--brand)' }}
+          >
+            開啟完整報告 PDF
+          </a>
+        </div>
       )}
       <div ref={containerRef} />
     </div>
