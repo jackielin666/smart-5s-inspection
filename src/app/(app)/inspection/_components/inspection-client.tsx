@@ -203,6 +203,8 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
     if (descNos) lines.push(`・缺失說明未填：第 ${descNos} 項`);
     const unitNos = toNos((i) => i.noUnit);
     if (unitNos) lines.push(`・權責單位未選：第 ${unitNos} 項`);
+    const areaNos = toNos((i) => i.noArea);
+    if (areaNos) lines.push(`・發生區域未填：第 ${areaNos} 項`);
     const photoNos = toNos((i) => i.noPhoto);
     if (photoNos) lines.push(`・改善前照片未拍：第 ${photoNos} 項`);
 
