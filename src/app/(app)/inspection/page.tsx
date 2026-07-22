@@ -25,11 +25,12 @@ export default async function InspectionPage({
   if (id) {
     const inspection = await inspectionRepo.findById(id);
     if (inspection) {
-      const [results, defects, units, unitAreas] = await Promise.all([
+      const [results, defects, units, unitAreas, notifiedPersons] = await Promise.all([
         inspectionRepo.getResults(id),
         defectRepo.listByInspection(id),
         masterDataRepo.getUnits(),
         masterDataRepo.getUnitAreas(),
+        masterDataRepo.getNotifiedPersons(),
       ]);
       return (
         <InspectionClient
@@ -37,6 +38,7 @@ export default async function InspectionPage({
           initialResults={results}
           units={units}
           unitAreas={unitAreas}
+          notifiedPersons={notifiedPersons}
           initialDefects={defects}
         />
       );

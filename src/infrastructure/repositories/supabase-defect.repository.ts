@@ -22,6 +22,7 @@ function mapDefect(row: Row): Defect {
     resolvedConfirmedBy: row.resolved_confirmed_by,
     resolutionNote: row.resolution_note,
     openedByName: row.opened_by_name ?? null,
+    notifiedName: row.notified_name ?? null,
     resolvedByName: row.resolved_by_name ?? null,
     qaOwner: row.qa_owner,
     createdAt: row.created_at,
@@ -127,6 +128,7 @@ export class SupabaseDefectRepository implements DefectRepository {
     if (patch.description !== undefined) row.description = patch.description;
     if (patch.suggestion !== undefined) row.suggestion = patch.suggestion;
     if (patch.areaName !== undefined) row.area_name = patch.areaName;
+    if (patch.notifiedName !== undefined) row.notified_name = patch.notifiedName;
     if (patch.dueDate !== undefined) row.due_date = patch.dueDate;
     if (patch.resolutionNote !== undefined) row.resolution_note = patch.resolutionNote;
     if (patch.unitIds !== undefined) {

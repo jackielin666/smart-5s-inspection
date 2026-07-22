@@ -10,6 +10,7 @@ import type {
   InspectionResult,
   Inspector,
   ItemVerdict,
+  NotifiedPerson,
   ResponsibleUnit,
   UnitArea,
 } from './entities';
@@ -29,6 +30,9 @@ export interface MasterDataRepository {
   getInspectors(includeInactive?: boolean): Promise<Inspector[]>;
   createInspector(name: string): Promise<Inspector>;
   updateInspector(id: string, patch: Partial<Pick<Inspector, 'name' | 'sortOrder' | 'isActive'>>): Promise<void>;
+  getNotifiedPersons(includeInactive?: boolean): Promise<NotifiedPerson[]>;
+  createNotifiedPerson(name: string, unitName?: string | null): Promise<NotifiedPerson>;
+  updateNotifiedPerson(id: string, patch: Partial<Pick<NotifiedPerson, 'name' | 'sortOrder' | 'isActive'>>): Promise<void>;
   getSetting<T>(key: string): Promise<T | null>;
 }
 

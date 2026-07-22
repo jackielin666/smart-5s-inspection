@@ -29,6 +29,15 @@ export interface Inspector {
   isActive: boolean;
 }
 
+/** 已知會人員（各班別班長/課長） */
+export interface NotifiedPerson {
+  id: string;
+  name: string;
+  unitName: string | null; // 對應班別（供依權責班別自動帶出）
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface ChecklistSection {
   id: string;
   name: string;
@@ -92,6 +101,7 @@ export interface Defect {
   resolvedConfirmedBy: string | null;
   resolutionNote: string | null;
   openedByName: string | null; // 開立人員（檢查人員姓名）
+  notifiedName: string | null; // 已知會人員（各班班長，單選）
   resolvedByName: string | null; // 確認/複檢人員姓名
   qaOwner: string | null; // 追蹤此單的品保（KPI 歸屬）
   createdAt: string;

@@ -31,24 +31,25 @@ const s = StyleSheet.create({
   resCell: { width: 44, alignItems: 'center', justifyContent: 'center' },
   formCode: { position: 'absolute', bottom: 14, right: 30, fontSize: 9 },
   // 狀況說明頁
-  noteBox: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, minHeight: 560 },
+  noteBox: { flexDirection: 'row', borderWidth: 1, borderColor: BORDER, flexGrow: 1, minHeight: 420 },
   noteLabel: { width: 24, borderRightWidth: 1, borderColor: BORDER, alignItems: 'center', paddingTop: 8 },
   noteBody: { flex: 1, padding: 8 },
   noteDate: { fontWeight: 'bold', marginTop: 6, marginBottom: 2 },
   noteItem: { marginBottom: 3, paddingLeft: 8 },
-  // 狀況說明格子表：序號/缺失/建議/區域/班別 對齊；每格 View 包 Text → 自動換行、列高自動加高
+  // 狀況說明格子表：序號/缺失/區域/班別/開單人員/已知會人員 對齊；每格 View 包 Text → 自動換行、列高自動加高
   nTable: { borderWidth: 0.5, borderColor: '#666', marginTop: 2, marginBottom: 4 },
   nRow: { flexDirection: 'row', borderTopWidth: 0.5, borderColor: '#666', alignItems: 'stretch' },
   nRowFirst: { flexDirection: 'row', alignItems: 'stretch' },
   nHead: { backgroundColor: '#f0f0f0' },
-  nSeq: { width: 20, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666', justifyContent: 'center' },
+  nSeq: { width: 18, paddingVertical: 2.5, paddingHorizontal: 2, borderRightWidth: 0.5, borderColor: '#666', justifyContent: 'center' },
   nSeqText: { textAlign: 'center' },
-  nDesc: { flex: 2.2, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
-  nSugg: { flex: 1.6, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
-  nArea: { flex: 1.1, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
-  nUnit: { flex: 1.1, paddingVertical: 2.5, paddingHorizontal: 4 },
+  nDesc: { flex: 2.4, paddingVertical: 2.5, paddingHorizontal: 4, borderRightWidth: 0.5, borderColor: '#666' },
+  nArea: { flex: 1.2, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666' },
+  nUnit: { flex: 1.2, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666' },
+  nOpener: { flex: 0.9, paddingVertical: 2.5, paddingHorizontal: 3, borderRightWidth: 0.5, borderColor: '#666' },
+  nNotified: { flex: 1.0, paddingVertical: 2.5, paddingHorizontal: 3 },
   // 簽核區：三欄平均分配、留高度給簽名
-  signRow: { flexDirection: 'row', marginTop: 20 },
+  signRow: { flexDirection: 'row', marginTop: 16, marginBottom: 18 },
   signCell: { flex: 1, paddingHorizontal: 10 },
   signLabel: { fontSize: 10, textAlign: 'center', marginBottom: 4 },
   signSpace: { height: 34, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 2 },
@@ -59,7 +60,7 @@ const s = StyleSheet.create({
   // 2×3 一頁 6 張：高度 232（含說明文字）確保三列含頁首仍在一頁內
   photoBox: { width: '50%', height: 232, padding: 4, flexDirection: 'column' },
   // 文字方塊：靠左上，項次/日期/說明/區域/班別
-  photoCaption: { fontSize: 8, textAlign: 'left', marginBottom: 2, fontWeight: 'bold' },
+  photoCaption: { fontSize: 9.5, textAlign: 'left', marginBottom: 2, fontWeight: 'bold', lineHeight: 1.2 },
   photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', backgroundColor: 'white', position: 'relative' },
   // 異常天數標籤：照片框左上角白底黑框
   photoDays: {
@@ -237,17 +238,19 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
                   <View style={[s.nRowFirst, s.nHead]}>
                     <View style={s.nSeq}><Text style={s.nSeqText}>#</Text></View>
                     <View style={s.nDesc}><Text>缺失說明</Text></View>
-                    <View style={s.nSugg}><Text>改善建議</Text></View>
                     <View style={s.nArea}><Text>發生區域</Text></View>
                     <View style={s.nUnit}><Text>權責班別</Text></View>
+                    <View style={s.nOpener}><Text>開單人員</Text></View>
+                    <View style={s.nNotified}><Text>已知會人員</Text></View>
                   </View>
                   {grp.items.map((it, i) => (
                     <View key={i} style={s.nRow}>
                       <View style={s.nSeq}><Text style={s.nSeqText}>{i + 1}</Text></View>
                       <View style={s.nDesc}><Text>{it.description}</Text></View>
-                      <View style={s.nSugg}><Text>{it.suggestion ?? ''}</Text></View>
                       <View style={s.nArea}><Text>{it.areaName ?? ''}</Text></View>
                       <View style={s.nUnit}><Text>{it.unitNames.join('、')}</Text></View>
+                      <View style={s.nOpener}><Text>{it.openedByName ?? ''}</Text></View>
+                      <View style={s.nNotified}><Text>{it.notifiedName ?? ''}</Text></View>
                     </View>
                   ))}
                 </View>

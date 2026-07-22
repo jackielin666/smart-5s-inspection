@@ -1,17 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Defect, DefectPhoto, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import type { Defect, DefectPhoto, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { setDefectUnitsAction, updateDefectFieldsAction } from '../defect-actions';
 import { listPhotosAction } from '../photo-actions';
 import { PhotoUploader } from './photo-uploader';
 
-/** 缺失就地展開表單：說明/建議/權責單位(複選)/發生區域/期限/照片 */
+/** 缺失就地展開表單：說明/權責單位(複選)/發生區域/已知會人員/期限/照片 */
 export function DefectForm({
   defect,
   index,
   units,
   unitAreas,
+  notifiedPersons,
   onSaving,
   onDelete,
 }: {
@@ -19,15 +20,17 @@ export function DefectForm({
   index: number;
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
+  notifiedPersons: NotifiedPerson[];
   onSaving: (saving: boolean) => void;
   onDelete?: () => void;
 }) {
   const [description, setDescription] = useState(defect.description ?? '');
-  const [suggestion, setSuggestion] = useState(defect.suggestion ?? '');
   const [dueDate, setDueDate] = useState(defect.dueDate);
   const [unitIds, setUnitIds] = useState<Set<string>>(new Set(defect.unitIds));
   const [areaName, setAreaName] = useState(defect.areaName ?? '');
   const [customAreaText, setCustomAreaText] = useState('');
+  const [notifiedName, setNotifiedName] = useState(defect.notifiedName ?? '');
+  const [customNotified, setCustomNotified] = useState('');
   const [unitPickerOpen, setUnitPickerOpen] = useState(false);
   const [photos, setPhotos] = useState<(DefectPhoto & { url: string })[] | null>(null);
 
@@ -48,23 +51,38 @@ export function DefectForm({
     if (defectIdRef.current !== defect.id) {
       defectIdRef.current = defect.id;
       setDescription(defect.description ?? '');
-      setSuggestion(defect.suggestion ?? '');
       setDueDate(defect.dueDate);
       setUnitIds(new Set(defect.unitIds));
       setAreaName(defect.areaName ?? '');
       setCustomAreaText('');
+      setNotifiedName(defect.notifiedName ?? '');
+      setCustomNotified('');
     }
   }, [defect]);
 
   async function saveField(patch: {
     description?: string;
-    suggestion?: string;
     dueDate?: string;
     areaName?: string | null;
+    notifiedName?: string | null;
   }) {
     onSaving(true);
     await updateDefectFieldsAction(defect.id, patch);
     onSaving(false);
+  }
+
+  async function chooseNotified(name: string) {
+    const next = notifiedName === name ? '' : name;
+    setNotifiedName(next);
+    await saveField({ notifiedName: next || null });
+  }
+
+  async function addCustomNotified() {
+    const name = customNotified.trim();
+    if (!name) return;
+    setCustomNotified('');
+    setNotifiedName(name);
+    await saveField({ notifiedName: name });
   }
 
   async function toggleUnit(unitId: string) {
@@ -86,9 +104,20 @@ export function DefectForm({
     }
     setUnitIds(next);
     if (areaChanged) setAreaName(nextAreaName);
+
+    // 依權責班別自動帶出對應班長（已知會人員為空時才自動填，避免蓋掉手動選擇）
+    let autoNotified: string | null = null;
+    if (next.has(unitId) && !notifiedName) {
+      const addedUnit = units.find((u) => u.id === unitId);
+      const match = notifiedPersons.find((p) => p.unitName && addedUnit && p.unitName === addedUnit.name);
+      if (match) autoNotified = match.name;
+    }
+    if (autoNotified) setNotifiedName(autoNotified);
+
     onSaving(true);
     await setDefectUnitsAction(defect.id, [...next]);
     if (areaChanged) await updateDefectFieldsAction(defect.id, { areaName: nextAreaName || null });
+    if (autoNotified) await updateDefectFieldsAction(defect.id, { notifiedName: autoNotified });
     onSaving(false);
   }
 
@@ -285,15 +314,57 @@ export function DefectForm({
       </div>
 
       <div>
-        <label className="mb-1 block text-xs font-semibold text-foreground">改善建議</label>
-        <textarea
-          value={suggestion}
-          onChange={(e) => setSuggestion(e.target.value)}
-          onBlur={() => saveField({ suggestion })}
-          rows={2}
-          placeholder="建議如何改善（可留空）"
-          className="w-full resize-none rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-        />
+        <label className="mb-1 block text-xs font-semibold text-foreground">
+          已知會人員（單選，選權責班別會自動帶出）
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {notifiedPersons.map((p) => {
+            const active = notifiedName === p.name;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => chooseNotified(p.name)}
+                className="rounded-full border px-3 py-1.5 text-sm transition active:scale-95"
+                style={
+                  active
+                    ? { background: 'var(--brand)', borderColor: 'var(--brand)', color: 'white' }
+                    : { borderColor: 'var(--border)', color: 'var(--foreground)', background: 'white' }
+                }
+              >
+                {p.name}
+              </button>
+            );
+          })}
+          {/* 若已選的人不在名單內（自行輸入的），也顯示成已選 */}
+          {notifiedName && !notifiedPersons.some((p) => p.name === notifiedName) && (
+            <button
+              type="button"
+              onClick={() => chooseNotified(notifiedName)}
+              className="rounded-full border px-3 py-1.5 text-sm text-white"
+              style={{ background: 'var(--brand)', borderColor: 'var(--brand)' }}
+            >
+              {notifiedName}
+            </button>
+          )}
+        </div>
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={customNotified}
+            placeholder="其它：自行填寫姓名"
+            onChange={(e) => setCustomNotified(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addCustomNotified()}
+            className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
+          />
+          <button
+            type="button"
+            onClick={addCustomNotified}
+            className="rounded-lg border border-border bg-white px-3 py-2 text-sm font-medium text-brand active:scale-95"
+          >
+            加入
+          </button>
+        </div>
       </div>
 
       <div>

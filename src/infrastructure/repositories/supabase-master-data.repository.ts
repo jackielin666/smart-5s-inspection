@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { MasterDataRepository } from '@/domain/repositories';
-import type { Inspector, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import type { Inspector, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -123,6 +123,52 @@ export class SupabaseMasterDataRepository implements MasterDataRepository {
     if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
     if (patch.isActive !== undefined) row.is_active = patch.isActive;
     const { error } = await this.db.from('inspectors').update(row).eq('id', id);
+    if (error) throw error;
+  }
+
+  async getNotifiedPersons(includeInactive = false): Promise<NotifiedPerson[]> {
+    let query = this.db.from('notified_persons').select('*').order('sort_order');
+    if (!includeInactive) query = query.eq('is_active', true);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []).map((r: Row) => ({
+      id: r.id,
+      name: r.name,
+      unitName: r.unit_name ?? null,
+      sortOrder: r.sort_order,
+      isActive: r.is_active,
+    }));
+  }
+
+  async createNotifiedPerson(name: string, unitName: string | null = null): Promise<NotifiedPerson> {
+    // 同名（含停用）→ 啟用沿用
+    const { data: existing } = await this.db
+      .from('notified_persons')
+      .select('*')
+      .eq('name', name)
+      .maybeSingle();
+    if (existing) {
+      await this.db.from('notified_persons').update({ is_active: true }).eq('id', existing.id);
+      return { id: existing.id, name: existing.name, unitName: existing.unit_name ?? null, sortOrder: existing.sort_order, isActive: true };
+    }
+    const { data, error } = await this.db
+      .from('notified_persons')
+      .insert({ name, unit_name: unitName, sort_order: 99 })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return { id: data.id, name: data.name, unitName: data.unit_name ?? null, sortOrder: data.sort_order, isActive: data.is_active };
+  }
+
+  async updateNotifiedPerson(
+    id: string,
+    patch: Partial<Pick<NotifiedPerson, 'name' | 'sortOrder' | 'isActive'>>,
+  ): Promise<void> {
+    const row: Row = {};
+    if (patch.name !== undefined) row.name = patch.name;
+    if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder;
+    if (patch.isActive !== undefined) row.is_active = patch.isActive;
+    const { error } = await this.db.from('notified_persons').update(row).eq('id', id);
     if (error) throw error;
   }
 

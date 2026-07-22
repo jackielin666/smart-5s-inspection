@@ -28,6 +28,8 @@ export interface PdfDefect {
   suggestion: string | null;
   unitNames: string[];
   areaName: string | null;
+  openedByName: string | null; // 開單人員
+  notifiedName: string | null; // 已知會人員
   inspectionDate: string;
   status: string; // open / in_progress / resolved
   resolvedAt: string | null; // 結案時間（ISO timestamp）
@@ -72,6 +74,8 @@ function makeMapDefect(fallbackDate: string) {
     suggestion: d.suggestion ?? null,
     unitNames: (d.defect_units ?? []).map((u: Row) => u.responsible_units?.name).filter(Boolean),
     areaName: d.area_name,
+    openedByName: d.opened_by_name ?? null,
+    notifiedName: d.notified_name ?? null,
     inspectionDate: d.inspections?.inspection_date ?? fallbackDate,
     status: d.status ?? 'open',
     resolvedAt: d.resolved_at ?? null,

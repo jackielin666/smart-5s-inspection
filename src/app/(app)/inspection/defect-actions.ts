@@ -78,6 +78,7 @@ async function createDefect(inspectionId: string, resultId: string): Promise<Def
     resolvedConfirmedBy: null,
     resolutionNote: null,
     openedByName,
+    notifiedName: null,
     resolvedByName: null,
     qaOwner: userId || null,
   });
@@ -141,24 +142,25 @@ export async function addDefectForResult(
  */
 export async function validateDefectsForSubmitAction(
   inspectionId: string,
-): Promise<{ resultId: string | null; noDesc: boolean; noUnit: boolean; noArea: boolean; noPhoto: boolean }[]> {
+): Promise<{ resultId: string | null; noDesc: boolean; noUnit: boolean; noArea: boolean; noNotified: boolean; noPhoto: boolean }[]> {
   try {
     const { supabase } = await ctx();
     const { data } = await supabase
       .from('defects')
-      .select('result_id, description, area_name, defect_units(unit_id), defect_photos(kind, deleted_at)')
+      .select('result_id, description, area_name, notified_name, defect_units(unit_id), defect_photos(kind, deleted_at)')
       .eq('inspection_id', inspectionId)
       .is('deleted_at', null);
-    const issues: { resultId: string | null; noDesc: boolean; noUnit: boolean; noArea: boolean; noPhoto: boolean }[] = [];
+    const issues: { resultId: string | null; noDesc: boolean; noUnit: boolean; noArea: boolean; noNotified: boolean; noPhoto: boolean }[] = [];
     for (const d of data ?? []) {
       const noDesc = !((d.description as string | null) ?? '').trim();
       const noUnit = ((d.defect_units ?? []) as unknown[]).length === 0;
       const noArea = !((d.area_name as string | null) ?? '').trim();
+      const noNotified = !((d.notified_name as string | null) ?? '').trim();
       const noPhoto = !((d.defect_photos ?? []) as { kind: string; deleted_at: string | null }[]).some(
         (p) => p.kind === 'before' && !p.deleted_at,
       );
-      if (noDesc || noUnit || noArea || noPhoto) {
-        issues.push({ resultId: d.result_id as string | null, noDesc, noUnit, noArea, noPhoto });
+      if (noDesc || noUnit || noArea || noNotified || noPhoto) {
+        issues.push({ resultId: d.result_id as string | null, noDesc, noUnit, noArea, noNotified, noPhoto });
       }
     }
     return issues;
@@ -218,7 +220,7 @@ export async function removeDefectForResult(resultId: string): Promise<{ ok: boo
 
 export async function updateDefectFieldsAction(
   defectId: string,
-  patch: { description?: string; suggestion?: string; dueDate?: string; areaName?: string | null },
+  patch: { description?: string; suggestion?: string; dueDate?: string; areaName?: string | null; notifiedName?: string | null },
 ): Promise<{ ok: boolean }> {
   try {
     const { repo } = await ctx();

@@ -1,14 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import type { Inspector, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import type { Inspector, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { AppDialog, type DialogState } from '../../_components/app-dialog';
 import {
   addInspectorAction,
+  addNotifiedPersonAction,
   addUnitAction,
   addUnitAreaAction,
   saveReportConfigAction,
   setInspectorActiveAction,
+  setNotifiedPersonActiveAction,
   setUnitActiveAction,
   setUnitAreaActiveAction,
 } from '../actions';
@@ -21,18 +23,21 @@ export function SettingsClient({
   inspectors: initInspectors,
   units: initUnits,
   unitAreas: initAreas,
+  notifiedPersons: initNotified,
   isAdmin,
   reportConfig,
 }: {
   inspectors: Inspector[];
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
+  notifiedPersons: NotifiedPerson[];
   isAdmin: boolean;
   reportConfig: { settleTime: string; reportEmails: string[] } | null;
 }) {
   const [inspectors, setInspectors] = useState(initInspectors);
   const [units, setUnits] = useState(initUnits);
   const [areas, setAreas] = useState(initAreas);
+  const [notified, setNotified] = useState(initNotified);
   const [areaUnitId, setAreaUnitId] = useState(initUnits.find((u) => u.isActive)?.id ?? '');
   const [dialog, setDialog] = useState<DialogState | null>(null);
 
@@ -65,6 +70,21 @@ export function SettingsClient({
     setUnits((prev) => {
       const without = prev.filter((x) => x.id !== res.unit.id);
       return [...without, res.unit];
+    });
+  }
+
+  async function toggleNotified(p: NotifiedPerson) {
+    const res = await setNotifiedPersonActiveAction(p.id, !p.isActive);
+    if (!res.ok) return fail();
+    setNotified((prev) => prev.map((x) => (x.id === p.id ? { ...x, isActive: !p.isActive } : x)));
+  }
+
+  async function addNotified(name: string) {
+    const res = await addNotifiedPersonAction(name);
+    if (!res.ok) return fail();
+    setNotified((prev) => {
+      const without = prev.filter((x) => x.id !== res.person.id);
+      return [...without, res.person];
     });
   }
 
@@ -116,6 +136,17 @@ export function SettingsClient({
         }}
         onAdd={addUnit}
         addPlaceholder="輸入班別名稱"
+      />
+
+      <ManageSection
+        title="已知會人員（各班班長）"
+        items={notified.map((p) => ({ id: p.id, name: p.unitName ? `${p.name}（${p.unitName}）` : p.name, isActive: p.isActive }))}
+        onToggle={(id) => {
+          const p = notified.find((x) => x.id === id);
+          if (p) toggleNotified(p);
+        }}
+        onAdd={addNotified}
+        addPlaceholder="輸入已知會人員姓名"
       />
 
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">

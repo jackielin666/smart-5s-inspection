@@ -2,7 +2,7 @@
 
 import { createClient } from '@/infrastructure/supabase/server';
 import { SupabaseMasterDataRepository } from '@/infrastructure/repositories/supabase-master-data.repository';
-import type { Inspector, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import type { Inspector, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 
 async function repo() {
   const supabase = await createClient();
@@ -82,6 +82,34 @@ export async function addUnitAreaAction(
 export async function setUnitAreaActiveAction(id: string, isActive: boolean): Promise<{ ok: boolean }> {
   try {
     await (await repo()).updateUnitArea(id, { isActive });
+    return { ok: true };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function addNotifiedPersonAction(
+  name: string,
+): Promise<{ ok: true; person: NotifiedPerson } | { ok: false }> {
+  try {
+    const trimmed = name.trim();
+    if (!trimmed) return { ok: false };
+    const r = await repo();
+    const all = await r.getNotifiedPersons(true);
+    const existing = all.find((p) => p.name === trimmed);
+    if (existing) {
+      await r.updateNotifiedPerson(existing.id, { isActive: true });
+      return { ok: true, person: { ...existing, isActive: true } };
+    }
+    return { ok: true, person: await r.createNotifiedPerson(trimmed) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function setNotifiedPersonActiveAction(id: string, isActive: boolean): Promise<{ ok: boolean }> {
+  try {
+    await (await repo()).updateNotifiedPerson(id, { isActive });
     return { ok: true };
   } catch {
     return { ok: false };

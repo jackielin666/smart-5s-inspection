@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import type { Defect, Inspection, InspectionResult, ItemVerdict, ResponsibleUnit, UnitArea } from '@/domain/entities';
+import type { Defect, Inspection, InspectionResult, ItemVerdict, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate, taipeiToday } from '@/domain/date';
 import { setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
 import {
@@ -28,10 +28,11 @@ type Props = {
   initialResults: InspectionResult[];
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
+  notifiedPersons: NotifiedPerson[];
   initialDefects: Defect[];
 };
 
-export function InspectionClient({ inspection, initialResults, units, unitAreas, initialDefects }: Props) {
+export function InspectionClient({ inspection, initialResults, units, unitAreas, notifiedPersons, initialDefects }: Props) {
   const [results, setResults] = useState(initialResults);
   const [defectsByResult, setDefectsByResult] = useState<Record<string, Defect[]>>(() => {
     const map: Record<string, Defect[]> = {};
@@ -205,6 +206,8 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
     if (unitNos) lines.push(`・權責單位未選：第 ${unitNos} 項`);
     const areaNos = toNos((i) => i.noArea);
     if (areaNos) lines.push(`・發生區域未填：第 ${areaNos} 項`);
+    const notifiedNos = toNos((i) => i.noNotified);
+    if (notifiedNos) lines.push(`・已知會人員未選：第 ${notifiedNos} 項`);
     const photoNos = toNos((i) => i.noPhoto);
     if (photoNos) lines.push(`・改善前照片未拍：第 ${photoNos} 項`);
 
@@ -296,6 +299,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
                 pending={pendingDefectIds.has(item.id)}
                 units={units}
                 unitAreas={unitAreas}
+                notifiedPersons={notifiedPersons}
                 readOnly={readOnly}
                 saving={savingIds.has(item.id)}
                 onVerdict={(v) => handleVerdict(item.id, v)}
@@ -365,6 +369,7 @@ function ItemCard({
   pending,
   units,
   unitAreas,
+  notifiedPersons,
   readOnly = false,
   saving,
   onVerdict,
@@ -381,6 +386,7 @@ function ItemCard({
   pending?: boolean;
   units: ResponsibleUnit[];
   unitAreas: UnitArea[];
+  notifiedPersons: NotifiedPerson[];
   readOnly?: boolean;
   saving: boolean;
   onVerdict: (v: ItemVerdict) => void;
@@ -443,6 +449,7 @@ function ItemCard({
                   <span>單位：{units.filter((u) => defect.unitIds.includes(u.id)).map((u) => u.name).join('、')}</span>
                 )}
                 {defect.areaName && <span>區域：{defect.areaName}</span>}
+                {defect.notifiedName && <span>已知會：{defect.notifiedName}</span>}
                 <span>期限：{defect.dueDate}</span>
               </div>
             </div>
@@ -459,6 +466,7 @@ function ItemCard({
               index={i + 1}
               units={units}
               unitAreas={unitAreas}
+              notifiedPersons={notifiedPersons}
               onSaving={onDefectSaving}
               onDelete={defects.length > 1 ? () => onDeleteDefect(defect.id) : undefined}
             />

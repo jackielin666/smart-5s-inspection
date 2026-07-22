@@ -13,10 +13,11 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   const isAdmin = isAdminEmail(user?.email);
   const master = new SupabaseMasterDataRepository(supabase);
-  const [inspectors, units, unitAreas, reportConfig] = await Promise.all([
+  const [inspectors, units, unitAreas, notifiedPersons, reportConfig] = await Promise.all([
     master.getInspectors(true),
     master.getUnits(true),
     master.getUnitAreas(true),
+    master.getNotifiedPersons(true),
     isAdmin ? getReportConfig(supabase) : Promise.resolve(null),
   ]);
   return (
@@ -24,6 +25,7 @@ export default async function SettingsPage() {
       inspectors={inspectors}
       units={units}
       unitAreas={unitAreas}
+      notifiedPersons={notifiedPersons}
       isAdmin={isAdmin}
       reportConfig={reportConfig ? { settleTime: reportConfig.settleTime, reportEmails: reportConfig.reportEmails } : null}
     />
