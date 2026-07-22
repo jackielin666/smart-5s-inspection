@@ -105,19 +105,9 @@ export function DefectForm({
     setUnitIds(next);
     if (areaChanged) setAreaName(nextAreaName);
 
-    // 依權責班別自動帶出對應班長（已知會人員為空時才自動填，避免蓋掉手動選擇）
-    let autoNotified: string | null = null;
-    if (next.has(unitId) && !notifiedName) {
-      const addedUnit = units.find((u) => u.id === unitId);
-      const match = notifiedPersons.find((p) => p.unitName && addedUnit && p.unitName === addedUnit.name);
-      if (match) autoNotified = match.name;
-    }
-    if (autoNotified) setNotifiedName(autoNotified);
-
     onSaving(true);
     await setDefectUnitsAction(defect.id, [...next]);
     if (areaChanged) await updateDefectFieldsAction(defect.id, { areaName: nextAreaName || null });
-    if (autoNotified) await updateDefectFieldsAction(defect.id, { notifiedName: autoNotified });
     onSaving(false);
   }
 
@@ -315,7 +305,7 @@ export function DefectForm({
 
       <div>
         <label className="mb-1 block text-xs font-semibold text-foreground">
-          已知會人員（單選，選權責班別會自動帶出）
+          已知會人員（單選，請點選負責處理的人員）
         </label>
         <div className="flex flex-wrap gap-1.5">
           {notifiedPersons.map((p) => {
