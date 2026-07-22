@@ -2,7 +2,6 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import type { Defect, Inspection, InspectionResult, ItemVerdict, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate, taipeiToday } from '@/domain/date';
 import { deleteInspectionAction, setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
@@ -49,7 +48,6 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  const router = useRouter();
   // 逾期未送出（非今日的草稿）也鎖定：任何人不得再修改，內容由當日 16:30 結算處理
   const expired = status !== 'completed' && inspection.inspectionDate < taipeiToday();
   const readOnly = status === 'completed' || expired; // 送出後/逾期 鎖定唯讀
@@ -257,11 +255,11 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
       onOk: async () => {
         setDeleting(true);
         const res = await deleteInspectionAction(inspection.id);
-        setDeleting(false);
         if (res.ok) {
-          router.replace('/inspection');
-          router.refresh();
+          // 硬導向回今日表單清單（整頁重載，確保清單為最新且不殘留已刪表單）
+          window.location.assign('/inspection');
         } else {
+          setDeleting(false);
           setDialog({ title: '提醒', mode: 'alert', lines: [res.error ?? '刪除失敗，請重試。'] });
         }
       },
