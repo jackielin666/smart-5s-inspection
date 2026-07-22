@@ -138,17 +138,6 @@ export function SettingsClient({
         addPlaceholder="輸入班別名稱"
       />
 
-      <ManageSection
-        title="已知會人員（各班班長）"
-        items={notified.map((p) => ({ id: p.id, name: p.unitName ? `${p.name}（${p.unitName}）` : p.name, isActive: p.isActive }))}
-        onToggle={(id) => {
-          const p = notified.find((x) => x.id === id);
-          if (p) toggleNotified(p);
-        }}
-        onAdd={addNotified}
-        addPlaceholder="輸入已知會人員姓名"
-      />
-
       <section className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <h2 className="mb-2 text-base font-bold text-foreground">發生區域（依班別）</h2>
         <select
@@ -174,6 +163,17 @@ export function SettingsClient({
         )}
         {areaUnitId && <AddRow placeholder="輸入區域名稱" onAdd={addArea} />}
       </section>
+
+      <ManageSection
+        title="已知會人員"
+        items={notified.map((p) => ({ id: p.id, name: p.unitName ? `${p.name}（${p.unitName}）` : p.name, isActive: p.isActive }))}
+        onToggle={(id) => {
+          const p = notified.find((x) => x.id === id);
+          if (p) toggleNotified(p);
+        }}
+        onAdd={addNotified}
+        addPlaceholder="輸入已知會人員姓名"
+      />
 
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />
     </div>
