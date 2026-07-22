@@ -2,9 +2,10 @@
 
 import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { Defect, Inspection, InspectionResult, ItemVerdict, NotifiedPerson, ResponsibleUnit, UnitArea } from '@/domain/entities';
 import { formatFriendlyDate, taipeiToday } from '@/domain/date';
-import { setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
+import { deleteInspectionAction, setTempFacilityAction, setVerdictAction, submitInspectionAction } from '../actions';
 import {
   addDefectForResult,
   deleteDefectAction,
@@ -46,7 +47,9 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
   const [pendingDefectIds, setPendingDefectIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState(inspection.status);
   const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const router = useRouter();
   // 逾期未送出（非今日的草稿）也鎖定：任何人不得再修改，內容由當日 16:30 結算處理
   const expired = status !== 'completed' && inspection.inspectionDate < taipeiToday();
   const readOnly = status === 'completed' || expired; // 送出後/逾期 鎖定唯讀
@@ -240,6 +243,31 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
     });
   }
 
+  function handleDeleteForm() {
+    if (readOnly || deleting) return;
+    setDialog({
+      title: '提醒：刪除此表單',
+      mode: 'confirm',
+      okLabel: '確定刪除',
+      lines: [
+        '確定刪除這張今日表單嗎？',
+        '整份判定、缺失與照片將一併移除（可還原）。',
+        '若未刪除，16:30 結算時會自動鎖定並計入統計。',
+      ],
+      onOk: async () => {
+        setDeleting(true);
+        const res = await deleteInspectionAction(inspection.id);
+        setDeleting(false);
+        if (res.ok) {
+          router.replace('/inspection');
+          router.refresh();
+        } else {
+          setDialog({ title: '提醒', mode: 'alert', lines: [res.error ?? '刪除失敗，請重試。'] });
+        }
+      },
+    });
+  }
+
   return (
     <div className="space-y-5 pb-6">
       <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
@@ -324,18 +352,33 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
             {expired ? '⚠ 逾期未送出，已鎖定不可修改' : '✓ 已送出鎖定（16:30 彙整為當日報告）'}
           </div>
         ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
-            style={{ background: 'var(--brand)' }}
-          >
-            {submitting ? '處理中…' : '送出此表單（送出後鎖定）'}
-          </button>
+          <>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || deleting}
+              className="w-full rounded-2xl py-4 text-base font-bold text-white shadow-sm transition active:scale-[0.99] disabled:opacity-60"
+              style={{ background: 'var(--brand)' }}
+            >
+              {submitting ? '處理中…' : '送出此表單（送出後鎖定）'}
+            </button>
+            <button
+              onClick={handleDeleteForm}
+              disabled={submitting || deleting}
+              className="w-full rounded-2xl border py-3 text-sm font-semibold transition active:scale-[0.99] disabled:opacity-60"
+              style={{ borderColor: 'var(--fail)', color: 'var(--fail)', background: 'white' }}
+            >
+              {deleting ? '刪除中…' : '刪除此表單'}
+            </button>
+          </>
         )}
         <p className="text-center text-xs text-muted">
           已完成 {doneCount}/{results.length} 項{!readOnly && ' · 全部完成才能送出'}
         </p>
+        {!readOnly && (
+          <p className="text-center text-xs text-muted">
+            開錯或測試的表單可按「刪除此表單」移除；未刪除者 16:30 結算時自動鎖定並計入統計。
+          </p>
+        )}
       </div>
 
       <AppDialog dialog={dialog} onClose={() => setDialog(null)} />

@@ -82,6 +82,46 @@ export async function createInspectorAction(
   }
 }
 
+/**
+ * 刪除今日未送出（草稿）表單：軟刪除表單本身＋其缺失（留稽核、可還原）。
+ * 僅允許刪除「今日、未送出」的表單；已送出/逾期鎖定者不可刪。
+ */
+export async function deleteInspectionAction(
+  inspectionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: insp } = await supabase
+      .from('inspections')
+      .select('id, status, inspection_date, deleted_at')
+      .eq('id', inspectionId)
+      .maybeSingle();
+    if (!insp || insp.deleted_at) return { ok: false, error: '表單不存在' };
+
+    const { taipeiToday } = await import('@/domain/date');
+    if (insp.status === 'completed') return { ok: false, error: '已送出表單不可刪除' };
+    if (insp.inspection_date !== taipeiToday()) return { ok: false, error: '僅能刪除今日表單' };
+
+    // 先軟刪除此表單的缺失（避免殘留在未改善清單），再軟刪除表單
+    const now = new Date().toISOString();
+    await supabase
+      .from('defects')
+      .update({ deleted_at: now })
+      .eq('inspection_id', inspectionId)
+      .is('deleted_at', null);
+
+    const repo = new SupabaseInspectionRepository(supabase);
+    await repo.softDelete(inspectionId, user?.id ?? '');
+    return { ok: true };
+  } catch {
+    return { ok: false, error: '刪除失敗' };
+  }
+}
+
 /** 送出表單：completed + submitted_at，之後鎖定唯讀（不可改回） */
 export async function submitInspectionAction(inspectionId: string): Promise<{ ok: boolean }> {
   try {
