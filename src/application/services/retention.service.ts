@@ -1,74 +1,91 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  PHOTO_RETENTION_MONTHS,
+  RESOLVED_PHOTO_RETENTION_MONTHS,
+  REPORT_RETENTION_MONTHS,
+  monthsAgo,
+} from '@/domain/retention-config';
+
+type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
 /**
  * 保留期清理（每日結算後執行一次，service role）：
- * - 原始高解析照片：超過保留月數 → 刪 storage 物件 + defect_photos 列（釋放容量）
- * - 報告快照 PDF：超過保留月數 → 刪 reports bucket 內該日檔案
+ * - 已改善（結案）缺失的前/後照片：保留 12 個月（依結案日）→ 超過刪 storage 物件 + 列
+ * - 其他照片（未結案 / 作廢 / 已刪表單）：保留 1 個月（依上傳日）→ 超過刪
+ * - 報告快照 PDF：保留 12 個月 → 超過刪 reports bucket 該日檔案
  * - 資料庫文字紀錄（inspections / inspection_results / defects）→ 永久保留，完全不動
- *
- * 缺失/巡檢的文字紀錄與其編號、判定、狀況說明都保留；只清「佔空間的檔案」。
  */
 
-/** 保留月數（要改保留期限改這裡即可）：照片與報告快照可各自設定 */
-export const PHOTO_RETENTION_MONTHS = 1;   // 原始高解析照片
-export const REPORT_RETENTION_MONTHS = 12; // PDF 報告快照
-
 export interface RetentionResult {
-  photoCutoff: string;     // 照片清理分界日（早於此日的照片被清）
-  reportCutoff: string;    // 報告快照清理分界日
-  photoObjects: number;    // 刪除的照片 storage 物件數
-  photoRows: number;       // 刪除的 defect_photos 列數
-  reportSnapshots: number; // 刪除的報告快照 PDF 數
+  resolvedPhotoCutoff: string; // 已改善照片分界日（結案早於此日被清）
+  otherPhotoCutoff: string;    // 其他照片分界日（上傳早於此日被清）
+  reportCutoff: string;        // 報告快照分界日
+  photoObjects: number;        // 刪除的照片 storage 物件數
+  photoRows: number;           // 刪除的 defect_photos 列數
+  reportSnapshots: number;     // 刪除的報告快照 PDF 數
 }
 
-/** today（YYYY-MM-DD）往前推 months 個月，回傳分界日字串 */
-function cutoffDate(today: string, months: number): string {
-  const d = new Date(`${today}T00:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() - months);
-  return d.toISOString().slice(0, 10);
+/** 刪 storage 物件（依 bucket 分組，storage_key 格式：bucket/path…） */
+async function removeObjects(db: SupabaseClient, keys: string[]): Promise<number> {
+  const byBucket = new Map<string, string[]>();
+  for (const key of keys) {
+    if (!key) continue;
+    const [bucket, ...rest] = key.split('/');
+    if (!bucket || rest.length === 0) continue;
+    if (!byBucket.has(bucket)) byBucket.set(bucket, []);
+    byBucket.get(bucket)!.push(rest.join('/'));
+  }
+  let removed = 0;
+  for (const [bucket, paths] of byBucket) {
+    for (let i = 0; i < paths.length; i += 100) {
+      const batch = paths.slice(i, i + 100);
+      const { error } = await db.storage.from(bucket).remove(batch);
+      if (!error) removed += batch.length;
+    }
+  }
+  return removed;
 }
 
-export async function runRetention(
-  db: SupabaseClient,
-  today: string,
-  photoMonths: number = PHOTO_RETENTION_MONTHS,
-  reportMonths: number = REPORT_RETENTION_MONTHS,
-): Promise<RetentionResult> {
-  const photoCutoff = cutoffDate(today, photoMonths);
-  const reportCutoff = cutoffDate(today, reportMonths);
+export async function runRetention(db: SupabaseClient, today: string): Promise<RetentionResult> {
+  const resolvedPhotoCutoff = monthsAgo(today, RESOLVED_PHOTO_RETENTION_MONTHS);
+  const otherPhotoCutoff = monthsAgo(today, PHOTO_RETENTION_MONTHS);
+  const reportCutoff = monthsAgo(today, REPORT_RETENTION_MONTHS);
   let photoObjects = 0;
   let photoRows = 0;
   let reportSnapshots = 0;
 
-  // 1) 原始照片：taken_at 早於照片分界日 → 刪 storage 物件 + DB 列
-  const { data: oldPhotos } = await db
+  // 1) 照片：連同所屬缺失狀態一起讀，逐張判定保留期
+  const { data: photos } = await db
     .from('defect_photos')
-    .select('id, storage_key')
-    .lt('taken_at', `${photoCutoff}T00:00:00+08:00`);
-  const rows = oldPhotos ?? [];
-  if (rows.length > 0) {
-    // 依 bucket 分組刪 storage 物件（storage_key 格式：bucket/path…）
-    const byBucket = new Map<string, string[]>();
-    for (const r of rows) {
-      const key = r.storage_key as string | null;
-      if (!key) continue;
-      const [bucket, ...rest] = key.split('/');
-      if (!bucket || rest.length === 0) continue;
-      if (!byBucket.has(bucket)) byBucket.set(bucket, []);
-      byBucket.get(bucket)!.push(rest.join('/'));
+    .select('id, storage_key, taken_at, defects(status, resolved_at, deleted_at, inspections(deleted_at))');
+  const purgeIds: string[] = [];
+  const purgeKeys: string[] = [];
+  for (const p of (photos ?? []) as Row[]) {
+    const d = p.defects as Row | null;
+    const formDeleted = !!d?.inspections?.deleted_at;
+    const defectDeleted = !!d?.deleted_at;
+    const isResolved = d?.status === 'resolved' && !defectDeleted && !formDeleted;
+
+    let expired: boolean;
+    if (isResolved) {
+      // 已改善照片：依結案日，保留 12 個月（無結案日則以上傳日）
+      const basis = (d?.resolved_at as string | null)?.slice(0, 10) ?? (p.taken_at as string)?.slice(0, 10) ?? today;
+      expired = basis < resolvedPhotoCutoff;
+    } else {
+      // 其他照片（未結案 / 作廢 / 已刪表單）：依上傳日，保留 1 個月
+      const basis = (p.taken_at as string)?.slice(0, 10) ?? today;
+      expired = basis < otherPhotoCutoff;
     }
-    for (const [bucket, paths] of byBucket) {
-      for (let i = 0; i < paths.length; i += 100) {
-        const { error } = await db.storage.from(bucket).remove(paths.slice(i, i + 100));
-        if (!error) photoObjects += Math.min(100, paths.length - i);
-      }
+    if (expired) {
+      purgeIds.push(p.id as string);
+      if (p.storage_key) purgeKeys.push(p.storage_key as string);
     }
-    // 刪 DB 列（照片 metadata；巡檢/缺失文字紀錄不動）
-    const ids = rows.map((r) => r.id as string);
-    for (let i = 0; i < ids.length; i += 200) {
-      const { error } = await db.from('defect_photos').delete().in('id', ids.slice(i, i + 200));
-      if (!error) photoRows += Math.min(200, ids.length - i);
-    }
+  }
+  if (purgeKeys.length > 0) photoObjects = await removeObjects(db, purgeKeys);
+  for (let i = 0; i < purgeIds.length; i += 200) {
+    const batch = purgeIds.slice(i, i + 200);
+    const { error } = await db.from('defect_photos').delete().in('id', batch);
+    if (!error) photoRows += batch.length;
   }
 
   // 2) 報告快照 PDF：檔名 YYYY-MM-DD.pdf，日期早於報告分界日 → 刪
@@ -78,12 +95,13 @@ export async function runRetention(
       .map((f) => f.name)
       .filter((n) => /^\d{4}-\d{2}-\d{2}\.pdf$/.test(n) && n.slice(0, 10) < reportCutoff);
     for (let i = 0; i < toDelete.length; i += 100) {
-      const { error } = await db.storage.from('reports').remove(toDelete.slice(i, i + 100));
-      if (!error) reportSnapshots += Math.min(100, toDelete.length - i);
+      const batch = toDelete.slice(i, i + 100);
+      const { error } = await db.storage.from('reports').remove(batch);
+      if (!error) reportSnapshots += batch.length;
     }
   } catch {
     /* reports bucket 尚未建立則略過 */
   }
 
-  return { photoCutoff, reportCutoff, photoObjects, photoRows, reportSnapshots };
+  return { resolvedPhotoCutoff, otherPhotoCutoff, reportCutoff, photoObjects, photoRows, reportSnapshots };
 }

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { taipeiToday } from '@/domain/date';
+import { HISTORY_VISIBLE_MONTHS, monthsAgo } from '@/domain/retention-config';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -25,12 +27,15 @@ export interface HistoryDayRow {
 
 /** 歷史巡檢：以日期分組，每日列出所有表單 */
 export async function listInspectionHistory(db: SupabaseClient): Promise<HistoryDayRow[]> {
+  // 顯示窗：只列近 N 個月內的巡檢日（超過期限的報告快照已清，避免開啟破圖）
+  const cutoff = monthsAgo(taipeiToday(), HISTORY_VISIBLE_MONTHS);
   const { data, error } = await db
     .from('inspections')
     .select(
       'id, inspection_date, status, filled_by_name, created_at, submitted_at, inspection_results(verdict), defects(id, status, deleted_at)',
     )
     .is('deleted_at', null)
+    .gte('inspection_date', cutoff)
     .order('inspection_date', { ascending: false })
     .order('created_at', { ascending: true });
   if (error) throw error;

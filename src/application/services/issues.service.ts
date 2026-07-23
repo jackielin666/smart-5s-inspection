@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { DefectStatus } from '@/domain/entities';
 import { taipeiToday } from '@/domain/date';
+import { CLOSED_ISSUES_VISIBLE_MONTHS, monthsAgo } from '@/domain/retention-config';
 
 type Row = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
@@ -94,11 +95,14 @@ export async function listOpenIssues(db: SupabaseClient): Promise<IssueView[]> {
 }
 
 export async function listClosedIssues(db: SupabaseClient): Promise<IssueView[]> {
+  // 顯示窗：只列近 N 個月內結案者（超過期限的照片已清、報表另存，避免破圖）
+  const cutoff = monthsAgo(taipeiToday(), CLOSED_ISSUES_VISIBLE_MONTHS);
   const { data, error } = await db
     .from('defects')
     .select(ISSUE_SELECT)
     .eq('status', 'resolved')
     .is('deleted_at', null)
+    .gte('resolved_at', `${cutoff}T00:00:00+08:00`)
     .order('resolved_at', { ascending: false });
   if (error) throw error;
   return (data ?? []).map(mapIssue);
