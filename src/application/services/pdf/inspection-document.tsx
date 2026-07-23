@@ -59,8 +59,8 @@ const s = StyleSheet.create({
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   // 2×3 一頁 6 張：高度 232（含說明文字）確保三列含頁首仍在一頁內
   photoBox: { width: '50%', height: 232, padding: 4, flexDirection: 'column' },
-  // 文字方塊：靠左上，項次/日期/說明/區域/班別
-  photoCaption: { fontSize: 9.5, textAlign: 'left', marginBottom: 2, fontWeight: 'bold', lineHeight: 1.2 },
+  // 文字方塊：靠左上，項次/日期/說明/區域/班別。固定 2 行高度 → 上排照片同一水平線
+  photoCaption: { fontSize: 9.5, textAlign: 'left', marginBottom: 2, fontWeight: 'bold', lineHeight: 1.2, height: 24, maxLines: 2, textOverflow: 'ellipsis' },
   photoInner: { flex: 1, borderWidth: 1, borderColor: '#999', backgroundColor: 'white', position: 'relative' },
   // 異常天數標籤：照片框左上角白底黑框
   photoDays: {
@@ -131,7 +131,13 @@ function Header({ d }: { d: InspectionPdfData }) {
   );
 }
 
-export function InspectionDocument({ data }: { data: InspectionPdfData }) {
+export function InspectionDocument({
+  data,
+  showImprovements = false, // 改善記錄頁：暫不輸出（保留格式，之後需要時傳 true 即可顯示）
+}: {
+  data: InspectionPdfData;
+  showImprovements?: boolean;
+}) {
   const mmdd = (iso: string) => iso.slice(5).replace('-', '/');
 
   // 照片頁＝狀況說明（第2頁）上每一筆「未結案」缺失的改善前照片，逐筆對應
@@ -300,8 +306,8 @@ export function InspectionDocument({ data }: { data: InspectionPdfData }) {
         </Page>
       ))}
 
-      {/* 改善記錄：改善前 / 改善後 對比 */}
-      {data.improvements.length > 0 && (
+      {/* 改善記錄：改善前 / 改善後 對比（暫不輸出，保留格式；showImprovements=true 才顯示） */}
+      {showImprovements && data.improvements.length > 0 && (
         <Page size="A4" style={s.page}>
           <Header d={data} />
           <Text style={s.h2}>改善記錄（改善前 / 改善後）</Text>

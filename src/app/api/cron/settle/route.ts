@@ -4,6 +4,7 @@ import { createClient } from '@/infrastructure/supabase/server';
 import { isAdminEmail } from '@/infrastructure/auth/admin';
 import { settleDay } from '@/application/services/daily-report.service';
 import { renderDailyReportPdf } from '@/application/services/pdf/render-daily-report';
+import { saveDailyReportSnapshot } from '@/application/services/pdf/report-snapshot.service';
 import { backupDayToDrive } from '@/application/services/drive-backup.service';
 import { sendReportEmail } from '@/infrastructure/email/send-email';
 import { getReportConfig, markSettled, taipeiHHMM } from '@/application/services/app-config';
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest) {
     }
 
     const pdf = await renderDailyReportPdf(db, date);
+    // 凍結報告快照：之後回看歷史報告一律讀此快照，內容不再變動
+    if (pdf) await saveDailyReportSnapshot(db, date, pdf);
     const [email, backup] = await Promise.all([
       pdf
         ? sendReportEmail({
