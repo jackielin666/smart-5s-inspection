@@ -9,11 +9,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * 缺失/巡檢的文字紀錄與其編號、判定、狀況說明都保留；只清「佔空間的檔案」。
  */
 
-/** 保留月數（要改保留期限改這裡即可） */
-export const RETENTION_MONTHS = 12;
+/** 保留月數（要改保留期限改這裡即可）：照片與報告快照可各自設定 */
+export const PHOTO_RETENTION_MONTHS = 1;   // 原始高解析照片
+export const REPORT_RETENTION_MONTHS = 12; // PDF 報告快照
 
 export interface RetentionResult {
-  cutoff: string;          // 清理分界日（早於此日的檔案被清）
+  photoCutoff: string;     // 照片清理分界日（早於此日的照片被清）
+  reportCutoff: string;    // 報告快照清理分界日
   photoObjects: number;    // 刪除的照片 storage 物件數
   photoRows: number;       // 刪除的 defect_photos 列數
   reportSnapshots: number; // 刪除的報告快照 PDF 數
@@ -29,18 +31,20 @@ function cutoffDate(today: string, months: number): string {
 export async function runRetention(
   db: SupabaseClient,
   today: string,
-  months: number = RETENTION_MONTHS,
+  photoMonths: number = PHOTO_RETENTION_MONTHS,
+  reportMonths: number = REPORT_RETENTION_MONTHS,
 ): Promise<RetentionResult> {
-  const cutoff = cutoffDate(today, months);
+  const photoCutoff = cutoffDate(today, photoMonths);
+  const reportCutoff = cutoffDate(today, reportMonths);
   let photoObjects = 0;
   let photoRows = 0;
   let reportSnapshots = 0;
 
-  // 1) 原始照片：taken_at 早於分界日 → 刪 storage 物件 + DB 列
+  // 1) 原始照片：taken_at 早於照片分界日 → 刪 storage 物件 + DB 列
   const { data: oldPhotos } = await db
     .from('defect_photos')
     .select('id, storage_key')
-    .lt('taken_at', `${cutoff}T00:00:00+08:00`);
+    .lt('taken_at', `${photoCutoff}T00:00:00+08:00`);
   const rows = oldPhotos ?? [];
   if (rows.length > 0) {
     // 依 bucket 分組刪 storage 物件（storage_key 格式：bucket/path…）
@@ -67,12 +71,12 @@ export async function runRetention(
     }
   }
 
-  // 2) 報告快照 PDF：檔名 YYYY-MM-DD.pdf，日期早於分界日 → 刪
+  // 2) 報告快照 PDF：檔名 YYYY-MM-DD.pdf，日期早於報告分界日 → 刪
   try {
     const { data: files } = await db.storage.from('reports').list('', { limit: 1000 });
     const toDelete = (files ?? [])
       .map((f) => f.name)
-      .filter((n) => /^\d{4}-\d{2}-\d{2}\.pdf$/.test(n) && n.slice(0, 10) < cutoff);
+      .filter((n) => /^\d{4}-\d{2}-\d{2}\.pdf$/.test(n) && n.slice(0, 10) < reportCutoff);
     for (let i = 0; i < toDelete.length; i += 100) {
       const { error } = await db.storage.from('reports').remove(toDelete.slice(i, i + 100));
       if (!error) reportSnapshots += Math.min(100, toDelete.length - i);
@@ -81,5 +85,5 @@ export async function runRetention(
     /* reports bucket 尚未建立則略過 */
   }
 
-  return { cutoff, photoObjects, photoRows, reportSnapshots };
+  return { photoCutoff, reportCutoff, photoObjects, photoRows, reportSnapshots };
 }

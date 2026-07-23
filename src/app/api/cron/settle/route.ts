@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
     const result = await settleDay(db, date);
     await markSettled(db, date);
 
-    // 保留期清理（每日結算後一次）：清 12 個月前的照片與報告快照，文字紀錄永久保留
+    // 保留期清理（每日結算後一次）：照片留 1 個月、報告快照留 12 個月，文字紀錄永久保留
     const retention = await runRetention(db, date).catch(() => null);
 
     // 空日：只寄提醒，不產生報告/備份
