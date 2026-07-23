@@ -5,6 +5,7 @@ import { isAdminEmail } from '@/infrastructure/auth/admin';
 import { settleDay } from '@/application/services/daily-report.service';
 import { renderDailyReportPdf } from '@/application/services/pdf/render-daily-report';
 import { saveDailyReportSnapshot } from '@/application/services/pdf/report-snapshot.service';
+import { runRetention } from '@/application/services/retention.service';
 import { backupDayToDrive } from '@/application/services/drive-backup.service';
 import { sendReportEmail } from '@/infrastructure/email/send-email';
 import { getReportConfig, markSettled, taipeiHHMM } from '@/application/services/app-config';
@@ -73,6 +74,9 @@ export async function GET(req: NextRequest) {
     const result = await settleDay(db, date);
     await markSettled(db, date);
 
+    // 保留期清理（每日結算後一次）：清 12 個月前的照片與報告快照，文字紀錄永久保留
+    const retention = await runRetention(db, date).catch(() => null);
+
     // 空日：只寄提醒，不產生報告/備份
     if (result.formsTotal === 0) {
       const email = await sendReportEmail({
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest) {
         subject: `【5S巡檢】${date} 今日尚未巡檢`,
         html: `<p>${date} 尚未進行 5S 巡檢，未產生報告。</p><p>— 智慧環境5S巡檢系統自動通知</p>`,
       });
-      return NextResponse.json({ ...result, note: '今日尚未巡檢，未產生報告', email });
+      return NextResponse.json({ ...result, note: '今日尚未巡檢，未產生報告', email, retention });
     }
 
     const pdf = await renderDailyReportPdf(db, date);
@@ -107,7 +111,7 @@ export async function GET(req: NextRequest) {
       backupDayToDrive(db, date, pdf),
     ]);
 
-    return NextResponse.json({ ...result, email, backup });
+    return NextResponse.json({ ...result, email, backup, retention });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'settle failed', date },
