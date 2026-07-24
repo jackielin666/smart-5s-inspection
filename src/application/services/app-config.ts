@@ -41,12 +41,9 @@ export async function getReportConfig(db: SupabaseClient): Promise<ReportConfig>
 
 export async function saveReportConfig(
   db: SupabaseClient,
-  cfg: { settleTime: string; reportEmails: string[] },
+  cfg: { reportEmails: string[] },
 ): Promise<void> {
-  await Promise.all([
-    writeKey(db, KEY.settleTime, cfg.settleTime),
-    writeKey(db, KEY.reportEmails, cfg.reportEmails),
-  ]);
+  await writeKey(db, KEY.reportEmails, cfg.reportEmails);
 }
 
 export async function markSettled(db: SupabaseClient, date: string): Promise<void> {

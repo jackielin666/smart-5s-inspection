@@ -8,17 +8,17 @@ import { saveDailyReportSnapshot } from '@/application/services/pdf/report-snaps
 import { runRetention } from '@/application/services/retention.service';
 import { backupDayToDrive } from '@/application/services/drive-backup.service';
 import { sendReportEmail } from '@/infrastructure/email/send-email';
-import { getReportConfig, markSettled, taipeiHHMM } from '@/application/services/app-config';
-import { taipeiToday } from '@/domain/date';
+import { getReportConfig, markSettled } from '@/application/services/app-config';
+import { previousDay, taipeiToday } from '@/domain/date';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 /**
- * 結算 cron（Vercel 每日 16:30 + GitHub Actions 下午每 30 分輪詢皆會呼叫）：
- * - 讀取設定的結算時間；未到時間或今日已結算 → 跳過（冪等）
- * - 到時間：鎖定未送出表單、產生日報 PDF、寄送（設定收件人）、備份到 Google Drive
- * - ?force=1：略過時間/日期閘門，供手動測試（備份去重、不會重複）
+ * 結算 cron（跨過午夜後由排程輪詢呼叫）：
+ * - 表單開放編輯至當日 24:00；跨天後（新的一天）自動結算「前一日」
+ * - 結算：鎖定未送出表單、產生日報 PDF、凍結快照、寄送、清理保留期
+ * - 前一日已結算 → 跳過（冪等）；?force=1&date=YYYY-MM-DD 可補結算指定日（測試用）
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -55,19 +55,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // force 可指定日期（補產/補備份任一天，測試用）；一般排程一律結算今日
+  // force 可指定日期（補結算任一天，測試用）；一般排程結算「前一日」（表單開放至當日 24:00）
   const dateParam = req.nextUrl.searchParams.get('date');
-  const date = force && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : taipeiToday();
+  const date = force && dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : previousDay(taipeiToday());
   const cfg = await getReportConfig(db);
 
-  // 時間/日期閘門（force 略過）
-  if (!force) {
-    if (cfg.lastSettledDate === date) {
-      return NextResponse.json({ skipped: 'already_settled', date });
-    }
-    if (taipeiHHMM() < cfg.settleTime) {
-      return NextResponse.json({ skipped: 'too_early', now: taipeiHHMM(), settleTime: cfg.settleTime });
-    }
+  // 冪等閘門（force 略過）：該日已結算 → 跳過。無時間閘門，跨天後任一次輪詢即結算前一日
+  if (!force && cfg.lastSettledDate === date) {
+    return NextResponse.json({ skipped: 'already_settled', date });
   }
 
   try {

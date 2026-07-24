@@ -15,23 +15,29 @@ export default async function DashboardPage() {
   const today = taipeiToday();
   const monthStart = `${today.slice(0, 7)}-01`;
 
-  const [{ data: monthForms }, { count: monthDefects }, { count: openDefects }] = await Promise.all([
-    supabase
-      .from('inspections')
-      .select('inspection_date, status')
-      .gte('inspection_date', monthStart)
-      .is('deleted_at', null),
-    supabase
-      .from('defects')
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', `${monthStart}T00:00:00+08:00`)
-      .is('deleted_at', null),
-    supabase
-      .from('defects')
-      .select('id', { count: 'exact', head: true })
-      .neq('status', 'resolved')
-      .is('deleted_at', null),
-  ]);
+  const [{ data: monthForms }, { count: monthDefects }, { count: openDefects }, { count: openFeedback }] =
+    await Promise.all([
+      supabase
+        .from('inspections')
+        .select('inspection_date, status')
+        .gte('inspection_date', monthStart)
+        .is('deleted_at', null),
+      supabase
+        .from('defects')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', `${monthStart}T00:00:00+08:00`)
+        .is('deleted_at', null),
+      supabase
+        .from('defects')
+        .select('id', { count: 'exact', head: true })
+        .neq('status', 'resolved')
+        .is('deleted_at', null),
+      supabase
+        .from('feedback')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'open')
+        .is('deleted_at', null),
+    ]);
 
   const todayForms = (monthForms ?? []).filter((f) => f.inspection_date === today);
   const monthDays = new Set((monthForms ?? []).map((f) => f.inspection_date)).size;
@@ -99,7 +105,7 @@ export default async function DashboardPage() {
       <section className="space-y-2">
         <h2 className="px-1 text-xs font-semibold tracking-wide text-muted">系統設定</h2>
         <FeatureRow href="/settings" icon="⚙️" title="設定管理" />
-        <FeatureRow href="/feedback" icon="📝" title="意見反饋" />
+        <FeatureRow href="/feedback" icon="📝" title="意見反饋" badge={openFeedback ?? 0} />
       </section>
     </div>
   );
@@ -111,11 +117,13 @@ function FeatureRow({
   icon,
   title,
   admin = false,
+  badge = 0,
 }: {
   href: string;
   icon: string;
   title: string;
   admin?: boolean;
+  badge?: number;
 }) {
   return (
     <Link
@@ -126,6 +134,14 @@ function FeatureRow({
       <span className="flex-1 text-[15px] font-bold" style={{ color: admin ? 'var(--brand)' : 'var(--foreground)' }}>
         {title}
       </span>
+      {badge > 0 && (
+        <span
+          className="flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold text-white"
+          style={{ background: 'var(--fail)' }}
+        >
+          {badge}
+        </span>
+      )}
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="m9 18 6-6-6-6" />
       </svg>

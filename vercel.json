@@ -10,7 +10,7 @@
   "crons": [
     {
       "path": "/api/cron/settle",
-      "schedule": "30 8 * * *"
+      "schedule": "10 16 * * *"
     }
   ]
 }

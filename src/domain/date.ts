@@ -8,6 +8,13 @@ export function taipeiToday(): string {
   }).format(new Date());
 }
 
+/** 指定 ISO 日期的前一天（YYYY-MM-DD）；不傳則以台北今日計 */
+export function previousDay(isoDate: string = taipeiToday()): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** 友善顯示用日期，例如 2026年07月10日 (五) */
 export function formatFriendlyDate(isoDate: string): string {
   const d = new Date(`${isoDate}T00:00:00+08:00`);

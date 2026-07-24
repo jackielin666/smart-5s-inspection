@@ -48,7 +48,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
-  // 逾期未送出（非今日的草稿）也鎖定：任何人不得再修改，內容由當日 16:30 結算處理
+  // 逾期未送出（非今日的草稿）也鎖定：任何人不得再修改，內容由當日 24:00 結算處理
   const expired = status !== 'completed' && inspection.inspectionDate < taipeiToday();
   const readOnly = status === 'completed' || expired; // 送出後/逾期 鎖定唯讀
   // 防止快速連點造成時序競賽：記錄每項「最後一次點擊」的判定 + 每項操作序列化佇列
@@ -233,7 +233,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
         setSubmitting(false);
         if (res.ok) {
           setStatus('completed');
-          setDialog({ title: '提醒', mode: 'alert', lines: ['已送出並鎖定 ✅', '16:30 將彙整為當日報告。'] });
+          setDialog({ title: '提醒', mode: 'alert', lines: ['已送出並鎖定 ✅', '當日 24:00 後彙整為當日報告。'] });
         } else {
           setDialog({ title: '提醒', mode: 'alert', lines: ['送出失敗，請重試。'] });
         }
@@ -250,7 +250,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
       lines: [
         '確定刪除這張今日表單嗎？',
         '整份判定、缺失與照片將一併移除（可還原）。',
-        '若未刪除，16:30 結算時會自動鎖定並計入統計。',
+        '若未刪除，當日 24:00 結算時會自動鎖定並計入統計。',
       ],
       onOk: async () => {
         setDeleting(true);
@@ -347,7 +347,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
             className="w-full rounded-2xl py-4 text-center text-base font-bold text-white shadow-sm"
             style={{ background: expired ? 'var(--muted)' : 'var(--pass)' }}
           >
-            {expired ? '⚠ 逾期未送出，已鎖定不可修改' : '✓ 已送出鎖定（16:30 彙整為當日報告）'}
+            {expired ? '⚠ 逾期未送出，已鎖定不可修改' : '✓ 已送出鎖定（當日 24:00 彙整為當日報告）'}
           </div>
         ) : (
           <>
@@ -374,7 +374,7 @@ export function InspectionClient({ inspection, initialResults, units, unitAreas,
         </p>
         {!readOnly && (
           <p className="text-center text-xs text-muted">
-            開錯或測試的表單可按「刪除此表單」移除；未刪除者 16:30 結算時自動鎖定並計入統計。
+            開錯或測試的表單可按「刪除此表單」移除；未刪除者當日 24:00 結算時自動鎖定並計入統計。
           </p>
         )}
       </div>

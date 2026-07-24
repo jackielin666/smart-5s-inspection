@@ -142,7 +142,7 @@ export function HistoryClient({ days }: { days: HistoryDayRow[] }) {
         </div>
       )}
 
-      <p className="text-center text-xs text-muted">已送出表單為唯讀 · 16:30 結算後產生當日報告</p>
+      <p className="text-center text-xs text-muted">已送出表單為唯讀 · 每日 24:00 結算後產生當日報告</p>
     </div>
   );
 }

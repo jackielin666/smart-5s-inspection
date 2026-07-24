@@ -28,7 +28,7 @@ export function TodayReportButton({
       setDialog({
         mode: 'confirm',
         okLabel: '仍要開啟',
-        lines: ['今日尚有未送出的表單。', '現在開啟為即時預覽，正式報告以 16:30 結算為準。'],
+        lines: ['今日尚有未送出的表單。', '現在開啟為即時預覽，正式報告以每日 24:00 結算為準。'],
         onOk: open,
       });
       return;

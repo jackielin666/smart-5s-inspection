@@ -27,7 +27,7 @@ export default async function SettingsPage() {
       unitAreas={unitAreas}
       notifiedPersons={notifiedPersons}
       isAdmin={isAdmin}
-      reportConfig={reportConfig ? { settleTime: reportConfig.settleTime, reportEmails: reportConfig.reportEmails } : null}
+      reportConfig={reportConfig ? { reportEmails: reportConfig.reportEmails } : null}
     />
   );
 }

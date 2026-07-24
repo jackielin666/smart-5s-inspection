@@ -32,7 +32,7 @@ export function SettingsClient({
   unitAreas: UnitArea[];
   notifiedPersons: NotifiedPerson[];
   isAdmin: boolean;
-  reportConfig: { settleTime: string; reportEmails: string[] } | null;
+  reportConfig: { reportEmails: string[] } | null;
 }) {
   const [inspectors, setInspectors] = useState(initInspectors);
   const [units, setUnits] = useState(initUnits);
@@ -265,17 +265,16 @@ function AddRow({ placeholder, onAdd }: { placeholder: string; onAdd: (name: str
   );
 }
 
-/** 報告寄送設定（僅管理者）：結算時間 + 收件人 */
+/** 報告寄送設定（僅管理者）：收件人（結算固定每日 24:00 後自動結算前一日） */
 function ReportConfigSection({
   initial,
   onError,
   onSaved,
 }: {
-  initial: { settleTime: string; reportEmails: string[] };
+  initial: { reportEmails: string[] };
   onError: (msg: string) => void;
   onSaved: () => void;
 }) {
-  const [time, setTime] = useState(initial.settleTime);
   const [emails, setEmails] = useState<string[]>(initial.reportEmails);
   const [newEmail, setNewEmail] = useState('');
   const [saving, setSaving] = useState(false);
@@ -290,7 +289,7 @@ function ReportConfigSection({
 
   async function save() {
     setSaving(true);
-    const res = await saveReportConfigAction(time, emails);
+    const res = await saveReportConfigAction(emails);
     setSaving(false);
     if (res.ok) onSaved();
     else onError(res.error ?? '儲存失敗');
@@ -301,19 +300,11 @@ function ReportConfigSection({
       <h2 className="mb-1 text-base font-bold" style={{ color: 'var(--brand)' }}>
         報告寄送設定（管理者）
       </h2>
-      <p className="mb-3 text-xs text-muted">設定每日結算時間與收件人，QC 帳號無此權限。</p>
+      <p className="mb-3 text-xs text-muted">設定日報收件人，QC 帳號無此權限。</p>
 
-      <div className="mb-3">
-        <label className="mb-1 block text-sm font-semibold text-foreground">每日結算/寄送時間</label>
-        <input
-          type="time"
-          value={time}
-          min="13:00"
-          max="19:30"
-          onChange={(e) => setTime(e.target.value)}
-          className="rounded-lg border border-border bg-white px-3 py-2 text-sm outline-none focus:border-brand"
-        />
-        <p className="mt-1 text-xs text-muted">可設 13:00–19:30，到點自動鎖定表單、產生日報並寄出</p>
+      <div className="mb-3 rounded-lg border border-border bg-background px-3 py-2">
+        <div className="text-sm font-semibold text-foreground">每日結算時間：24:00（固定）</div>
+        <p className="mt-1 text-xs text-muted">表單開放編輯至當日 24:00；跨天後自動結算前一日、鎖定表單、產生並寄出日報。</p>
       </div>
 
       <div className="mb-3">

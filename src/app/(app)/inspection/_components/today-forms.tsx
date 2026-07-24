@@ -23,7 +23,7 @@ function hhmm(iso: string | null): string {
   return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Taipei' });
 }
 
-/** 今日表單清單：每次檢查＝一張新表單（開表必選填表人），16:30 結算彙整成當日報告 */
+/** 今日表單清單：每次檢查＝一張新表單（開表必選填表人），24:00 結算彙整成當日報告 */
 export function TodayFormsClient({
   date,
   forms,
@@ -70,7 +70,7 @@ export function TodayFormsClient({
     <div className="space-y-4 pb-6">
       <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
         <div className="text-lg font-bold text-foreground">{formatFriendlyDate(date)}</div>
-        <div className="text-sm text-muted">全廠每日 · S12501F · 每次檢查各開一張表單，16:30 彙整成當日報告</div>
+        <div className="text-sm text-muted">全廠每日 · S12501F · 每次檢查各開一張表單，每日 24:00 彙整成當日報告</div>
       </div>
 
       {forms.length > 0 && (

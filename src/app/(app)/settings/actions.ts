@@ -116,9 +116,8 @@ export async function setNotifiedPersonActiveAction(id: string, isActive: boolea
   }
 }
 
-/** 儲存報告寄送設定（結算時間＋收件人，僅管理者） */
+/** 儲存報告收件人（結算固定於每日 24:00 後自動結算前一日，僅管理者） */
 export async function saveReportConfigAction(
-  settleTime: string,
   reportEmails: string[],
 ): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -131,14 +130,10 @@ export async function saveReportConfigAction(
     } = await supabase.auth.getUser();
     if (!isAdminEmail(user?.email)) return { ok: false, error: '僅管理者可修改' };
 
-    // 時間限 13:00–19:30（GitHub Actions 輪詢涵蓋範圍）
-    if (!/^\d{2}:\d{2}$/.test(settleTime) || settleTime < '13:00' || settleTime > '19:30') {
-      return { ok: false, error: '結算時間請設在 13:00–19:30 之間' };
-    }
     const emails = reportEmails.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
     if (emails.length === 0) return { ok: false, error: '請至少填一個有效 Email' };
 
-    await saveReportConfig(supabase, { settleTime, reportEmails: [...new Set(emails)] });
+    await saveReportConfig(supabase, { reportEmails: [...new Set(emails)] });
     return { ok: true };
   } catch {
     return { ok: false, error: '儲存失敗' };
