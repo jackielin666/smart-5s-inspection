@@ -115,27 +115,3 @@ export async function setNotifiedPersonActiveAction(id: string, isActive: boolea
     return { ok: false };
   }
 }
-
-/** 儲存報告收件人（結算固定於每日 24:00 後自動結算前一日，僅管理者） */
-export async function saveReportConfigAction(
-  reportEmails: string[],
-): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const { createClient } = await import('@/infrastructure/supabase/server');
-    const { isAdminEmail } = await import('@/infrastructure/auth/admin');
-    const { saveReportConfig } = await import('@/application/services/app-config');
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!isAdminEmail(user?.email)) return { ok: false, error: '僅管理者可修改' };
-
-    const emails = reportEmails.map((e) => e.trim().toLowerCase()).filter((e) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
-    if (emails.length === 0) return { ok: false, error: '請至少填一個有效 Email' };
-
-    await saveReportConfig(supabase, { reportEmails: [...new Set(emails)] });
-    return { ok: true };
-  } catch {
-    return { ok: false, error: '儲存失敗' };
-  }
-}
